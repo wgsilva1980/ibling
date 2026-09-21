@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
           codigo: data.codigo,
           nome: data.nome,
           preco: data.preco,
-          situacao: data.situacao === 'A' ? 'Ativo' : 'Inativo',
+          situacao: data.situacao === 'A' ? 'Ativo' : (data.situacao === 'I' ? 'Inativo' : data.situacao),
           raw: data,
           atualizado_em: new Date().toISOString(),
         },

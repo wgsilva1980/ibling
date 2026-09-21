@@ -40,7 +40,12 @@ export default function ProdutosPage() {
         }
 
         if (situacaoFilter) {
-          query = query.ilike('situacao', situacaoFilter);
+          // Normalizar filtro: "Ativo" pode estar salvo como "A" ou "Ativo"
+          if (situacaoFilter === 'Ativo') {
+            query = query.or(`situacao.ilike.Ativo,situacao.eq.A`);
+          } else {
+            query = query.ilike('situacao', situacaoFilter);
+          }
         }
 
         const { data, error: fetchError } = await query;
