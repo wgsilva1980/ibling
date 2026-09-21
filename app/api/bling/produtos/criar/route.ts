@@ -22,53 +22,19 @@ export async function POST(req: NextRequest) {
     const codigo = `VAR-${timestamp}-${random}`;
 
     console.log(`Criando novo produto no Bling: ${codigo} - ${nome}`);
-
-    // Se há produto pai, criar como variação (tipo V)
-    let isVariacao = false;
-    let produtoMae: any = null;
-
-    if (produtoPaiId) {
-      // Garantir que produtoPaiId é um número
-      const idPai = typeof produtoPaiId === 'string' ? parseInt(produtoPaiId, 10) : produtoPaiId;
-
-      if (isNaN(idPai)) {
-        throw new Error(`produtoPaiId inválido: ${produtoPaiId}`);
-      }
-
-      console.log(`Buscando produto pai com ID: ${idPai}`);
-
-      // Buscar dados do produto pai para usar o mesmo formato
-      try {
-        const response = await blingRequest(`/produtos/${idPai}`);
-        produtoMae = response.data;
-        console.log(`Produto pai encontrado:`, JSON.stringify(produtoMae, null, 2));
-      } catch (err: any) {
-        console.error(`Erro ao buscar produto pai ${idPai}:`, err);
-        // Continuar mesmo se não conseguir buscar, pois pode ser timeout
-      }
-      isVariacao = true;
-    }
+    console.log(`produtoPaiId recebido: ${produtoPaiId}`);
 
     // Montar corpo do request
+    // Nota: API Bling v3 não aceita tipo='V'. Variações são criadas como produtos simples (tipo='P')
+    // O agrupamento de variações acontece pelo nome (padrão de atributos como COR:, TAM:)
     const corpo: any = {
       codigo,
       nome,
       preco: parseFloat(preco.toString()),
       situacao: situacao === 'Ativo' ? 'A' : 'I',
+      tipo: 'P',
+      formato: 'S',
     };
-
-    // Adicionar formato apenas para produtos simples, não para variações
-    if (!isVariacao) {
-      corpo.formato = 'S';
-      corpo.tipo = 'P';
-    } else {
-      corpo.tipo = 'V';
-      corpo.pai = { id: produtoPaiId };
-      // Usar formato do produto pai se disponível
-      if (produtoMae?.formato) {
-        corpo.formato = produtoMae.formato;
-      }
-    }
 
     // Criar no Bling
     console.log(`Payload enviado para Bling:`, JSON.stringify(corpo, null, 2));
