@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     await supabase.from('bling_sync_log').insert({
       tipo: 'webhook',
       status: 'sucesso',
-      detalhes: { evento, payload },
+      detalhes: { event, payload },
     });
 
     return NextResponse.json(
