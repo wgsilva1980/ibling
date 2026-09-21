@@ -30,6 +30,7 @@ export default function FotosPage() {
   const [error, setError] = useState<string | null>(null);
   const [deletando, setDeletando] = useState<string | null>(null);
   const [uploadando, setUploadando] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -92,6 +93,45 @@ export default function FotosPage() {
       setError(err.message || 'Erro ao remover foto');
     } finally {
       setDeletando(null);
+    }
+  }
+
+  async function handleSincronizarFotos() {
+    try {
+      setSincronizando(true);
+      setError(null);
+
+      const response = await fetch(`/api/bling/fotos/${produtoId}/sync`, {
+        method: 'POST',
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao sincronizar');
+      }
+
+      // Recarregar fotos
+      const { data: produtoData } = await supabase
+        .from('bling_produtos')
+        .select('raw')
+        .eq('id', parseInt(produtoId))
+        .single();
+
+      if (produtoData?.raw?.imagens && Array.isArray(produtoData.raw.imagens)) {
+        const fotosFormatadas = produtoData.raw.imagens.map((img: any, idx: number) => ({
+          id: img.id || `img-${idx}`,
+          url: img.link || img.url || '',
+          nome: img.nome || `Foto ${idx + 1}`,
+          principal: img.principal || false,
+        })).filter((f: Foto) => f.url);
+
+        setFotos(fotosFormatadas);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Erro ao sincronizar fotos');
+    } finally {
+      setSincronizando(false);
     }
   }
 
@@ -187,26 +227,45 @@ export default function FotosPage() {
           <h1 style={{ marginTop: 0, marginBottom: 0 }}>
             Galeria: {produto?.codigo}
           </h1>
-          <label style={{
-            padding: '10px 16px',
-            backgroundColor: '#10b981',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            cursor: uploadando ? 'not-allowed' : 'pointer',
-            opacity: uploadando ? 0.6 : 1,
-          }}>
-            {uploadando ? '⏳ Upload...' : '📸 Upload Foto'}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleUploadFoto}
-              disabled={uploadando}
-              style={{ display: 'none' }}
-            />
-          </label>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={handleSincronizarFotos}
+              disabled={sincronizando}
+              style={{
+                padding: '10px 16px',
+                backgroundColor: '#06b6d4',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                cursor: sincronizando ? 'not-allowed' : 'pointer',
+                opacity: sincronizando ? 0.6 : 1,
+              }}
+            >
+              {sincronizando ? '⏳ Sincronizando...' : '🔄 Sincronizar do Bling'}
+            </button>
+            <label style={{
+              padding: '10px 16px',
+              backgroundColor: '#10b981',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              cursor: uploadando ? 'not-allowed' : 'pointer',
+              opacity: uploadando ? 0.6 : 1,
+            }}>
+              {uploadando ? '⏳ Upload...' : '📸 Upload Foto'}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleUploadFoto}
+                disabled={uploadando}
+                style={{ display: 'none' }}
+              />
+            </label>
+          </div>
         </div>
 
         {error && (
