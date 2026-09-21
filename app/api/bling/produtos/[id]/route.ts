@@ -20,6 +20,23 @@ export async function PUT(
       );
     }
 
+    // Buscar produto atual para obter tipo e formato
+    const { data: produtoAtual, error: fetchError } = await supabase
+      .from('bling_produtos')
+      .select('raw')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !produtoAtual) {
+      return NextResponse.json(
+        { error: 'Produto não encontrado' },
+        { status: 404 }
+      );
+    }
+
+    const tipo = produtoAtual.raw?.tipo || 'P';
+    const formato = produtoAtual.raw?.formato || 'S';
+
     // Atualizar no Bling
     console.log(`Atualizando produto ${id} no Bling`);
     await blingRequest(`/produtos/${id}`, {
@@ -30,6 +47,8 @@ export async function PUT(
         descricaoCurta: descricaoCurta || '',
         descricaoComplementar: descricaoComplementar || '',
         situacao: situacao === 'Ativo' ? 'A' : 'I',
+        tipo,
+        formato,
       }),
     });
 
