@@ -22,14 +22,17 @@ export async function POST(
       );
     }
 
-    // Debug: Log estrutura das imagens
+    // Debug: Estrutura das imagens
     const imagensArray = response.data.imagens || response.data.fotos || [];
-    console.log(`Estrutura de imagens:`, {
+    const debugInfo = {
       tem_imagens: !!response.data.imagens,
       tem_fotos: !!response.data.fotos,
       imagens_length: imagensArray?.length || 0,
-      primeira_imagem: imagensArray?.[0],
-    });
+      primeira_imagem: imagensArray?.[0] || null,
+      todas_as_chaves: Object.keys(response.data),
+    };
+
+    console.log(`Estrutura de imagens:`, debugInfo);
 
     // Atualizar no Supabase com dados atualizados (incluindo imagens)
     await supabase.from('bling_produtos').update({
@@ -45,6 +48,7 @@ export async function POST(
         ação: 'fotos sincronizadas',
         produtoId,
         quantidadeFotos: imagensArray?.length || 0,
+        debug: debugInfo,
       },
     });
 
@@ -52,6 +56,7 @@ export async function POST(
       {
         message: 'Fotos sincronizadas com sucesso',
         quantidadeFotos: imagensArray?.length || 0,
+        debug: debugInfo,
       },
       { status: 200 }
     );
