@@ -49,15 +49,21 @@ export default function FotosPage() {
         setProduto(produtoData);
 
         // Extrair fotos do campo raw (imagens do Bling)
-        if (produtoData?.raw?.imagens && Array.isArray(produtoData.raw.imagens)) {
-          const fotosFormatadas = produtoData.raw.imagens.map((img: any, idx: number) => ({
+        // Tentar múltiplas estruturas possíveis
+        const imagensArray = produtoData?.raw?.imagens || produtoData?.raw?.fotos || [];
+
+        if (Array.isArray(imagensArray) && imagensArray.length > 0) {
+          const fotosFormatadas = imagensArray.map((img: any, idx: number) => ({
             id: img.id || `img-${idx}`,
-            url: img.link || img.url || '',
-            nome: img.nome || `Foto ${idx + 1}`,
-            principal: img.principal || false,
+            url: img.link || img.url || img.src || '',
+            nome: img.nome || img.name || `Foto ${idx + 1}`,
+            principal: img.principal || img.isPrincipal || false,
           })).filter((f: Foto) => f.url);
 
+          console.log('Fotos extraídas:', fotosFormatadas);
           setFotos(fotosFormatadas);
+        } else {
+          console.log('Nenhuma imagem encontrada:', { imagens: produtoData?.raw?.imagens, fotos: produtoData?.raw?.fotos });
         }
       } catch (err: any) {
         setError(err.message || 'Erro ao carregar fotos');
@@ -118,12 +124,14 @@ export default function FotosPage() {
         .eq('id', parseInt(produtoId))
         .single();
 
-      if (produtoData?.raw?.imagens && Array.isArray(produtoData.raw.imagens)) {
-        const fotosFormatadas = produtoData.raw.imagens.map((img: any, idx: number) => ({
+      const imagensArray = produtoData?.raw?.imagens || produtoData?.raw?.fotos || [];
+
+      if (Array.isArray(imagensArray) && imagensArray.length > 0) {
+        const fotosFormatadas = imagensArray.map((img: any, idx: number) => ({
           id: img.id || `img-${idx}`,
-          url: img.link || img.url || '',
-          nome: img.nome || `Foto ${idx + 1}`,
-          principal: img.principal || false,
+          url: img.link || img.url || img.src || '',
+          nome: img.nome || img.name || `Foto ${idx + 1}`,
+          principal: img.principal || img.isPrincipal || false,
         })).filter((f: Foto) => f.url);
 
         setFotos(fotosFormatadas);
@@ -164,12 +172,14 @@ export default function FotosPage() {
         .eq('id', parseInt(produtoId))
         .single();
 
-      if (produtoData?.raw?.imagens) {
-        const fotosFormatadas = produtoData.raw.imagens.map((img: any, idx: number) => ({
+      const imagensArray = produtoData?.raw?.imagens || produtoData?.raw?.fotos || [];
+
+      if (Array.isArray(imagensArray) && imagensArray.length > 0) {
+        const fotosFormatadas = imagensArray.map((img: any, idx: number) => ({
           id: img.id || `img-${idx}`,
-          url: img.link || img.url || '',
-          nome: img.nome || `Foto ${idx + 1}`,
-          principal: img.principal || false,
+          url: img.link || img.url || img.src || '',
+          nome: img.nome || img.name || `Foto ${idx + 1}`,
+          principal: img.principal || img.isPrincipal || false,
         })).filter((f: Foto) => f.url);
 
         setFotos(fotosFormatadas);
