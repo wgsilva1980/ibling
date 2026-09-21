@@ -19,7 +19,6 @@ interface Deposito {
   deposito_id: number;
   deposito_nome: string;
   saldo_fisico: number;
-  saldo_virtual: number;
 }
 
 export default function ProdutoDetalhePage() {
@@ -233,8 +232,6 @@ export default function ProdutoDetalhePage() {
                 <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
                   <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Depósito</th>
                   <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>Saldo Físico</th>
-                  <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>Saldo Virtual</th>
-                  <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -253,12 +250,6 @@ export default function ProdutoDetalhePage() {
                       }}>
                         {dep.saldo_fisico}
                       </span>
-                    </td>
-                    <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px' }}>
-                      {dep.saldo_virtual}
-                    </td>
-                    <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: 'bold' }}>
-                      {dep.saldo_fisico + dep.saldo_virtual}
                     </td>
                   </tr>
                 ))}
