@@ -65,14 +65,17 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(corpo),
     });
 
-    console.log(`Resposta ao criar produto:`, JSON.stringify(response.data, null, 2));
+    console.log(`Resposta completa POST /produtos:`, JSON.stringify(response, null, 2));
 
-    if (!response.data) {
-      throw new Error('Falha ao criar produto no Bling: resposta vazia');
+    const produtoData = response.data || response;
+
+    if (!produtoData || !produtoData.id) {
+      console.error(`Resposta inválida ao criar produto:`, JSON.stringify(response, null, 2));
+      throw new Error('Falha ao criar produto no Bling: resposta vazia ou sem ID');
     }
 
-    const novoId = response.data.id;
-    console.log(`Produto criado com sucesso no Bling: ${novoId}`);
+    const novoId = produtoData.id;
+    console.log(`✅ Produto criado com sucesso no Bling: ${novoId}`);
 
     // Passo 2: Se tem produto pai, vincular a nova variação ao produto pai
     if (produtoPaiId) {
@@ -84,7 +87,11 @@ export async function POST(req: NextRequest) {
 
           // Buscar o produto pai com todas as suas variações
           const produtoPaiResponse = await blingRequest(`/produtos/${idPai}`);
-          const produtoPai = produtoPaiResponse.data;
+          const produtoPai = produtoPaiResponse.data || produtoPaiResponse;
+
+          if (!produtoPai) {
+            throw new Error('Produto pai não encontrado na resposta');
+          }
 
           console.log(`Produto pai encontrado: ${produtoPai.nome}`);
           console.log(`Variações existentes: ${produtoPai.variacoes?.length || 0}`);
@@ -177,8 +184,10 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    const produtoDataFinal = response.data || response;
+
     return NextResponse.json(
-      { message: 'Produto criado com sucesso', data: response.data },
+      { message: 'Produto criado com sucesso', data: produtoDataFinal },
       { status: 201 }
     );
   } catch (error: any) {
