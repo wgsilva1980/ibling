@@ -119,20 +119,24 @@ export async function POST(req: NextRequest) {
           console.log(`Atributos encontrados:`, JSON.stringify(atributos, null, 2));
 
           if (atributos.length > 0) {
-            // Chamar endpoint para gerar combinações
-            const payloadCombinacoes = {
-              id: idPai,
-              atributos,
+            // Chamar endpoint correto: POST /Api/v3/produtovariacao/atributo
+            const payloadVariacao = {
+              idProdutoPai: idPai.toString(),
+              atributos: atributos.map(attr => ({
+                nome: attr.nome,
+                opcoes: attr.opcoes,
+                opcaoUnica: attr.opcoes.length === 1,
+              })),
             };
 
-            console.log(`Payload para gerar-combinacoes:`, JSON.stringify(payloadCombinacoes, null, 2));
+            console.log(`Payload para produtovariacao/atributo:`, JSON.stringify(payloadVariacao, null, 2));
 
-            const combinacoesResponse = await blingRequest('/produtos/variacoes/atributos/gerar-combinacoes', {
+            const variacaoResponse = await blingRequest('/produtovariacao/atributo', {
               method: 'POST',
-              body: JSON.stringify(payloadCombinacoes),
+              body: JSON.stringify(payloadVariacao),
             });
 
-            console.log(`Resposta ao gerar combinações:`, JSON.stringify(combinacoesResponse.data, null, 2));
+            console.log(`Produto pai com variações vinculadas:`, JSON.stringify(variacaoResponse.data, null, 2));
           }
         } catch (err: any) {
           console.error(`Erro ao gerar combinações de variações:`, err.message);
