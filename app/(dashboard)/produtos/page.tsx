@@ -170,30 +170,44 @@ export default function ProdutosPage() {
         setCores(coresUnicas);
         setTamanhos(tamanhoUnicos);
 
-        // Aplicar filtros de atributos
-        let produtosFiltrados = produtosComAtributos;
+        // Agrupar TODOS os produtos primeiro
+        const gruposAgrupados = agruparProdutos(produtosComAtributos);
 
-        if (corFilter) {
-          produtosFiltrados = produtosFiltrados.filter(
-            p => p.atributos.cor === corFilter
-          );
+        // Depois filtrar os grupos inteiros
+        let gruposFiltrados = gruposAgrupados;
+
+        // Se houver filtro de cor ou tamanho, mostrar grupo se qualquer variação combina
+        if (corFilter || tamanhoFilter) {
+          gruposFiltrados = gruposFiltrados.map(grupo => {
+            // Filtrar as variações do grupo
+            let variacoesFiltradas = grupo.variacoes;
+
+            if (corFilter) {
+              variacoesFiltradas = variacoesFiltradas.filter(
+                v => v.atributos.cor === corFilter
+              );
+            }
+
+            if (tamanhoFilter) {
+              variacoesFiltradas = variacoesFiltradas.filter(
+                v => v.atributos.tamanho === tamanhoFilter
+              );
+            }
+
+            return { ...grupo, variacoes: variacoesFiltradas };
+          });
         }
 
-        if (tamanhoFilter) {
-          produtosFiltrados = produtosFiltrados.filter(
-            p => p.atributos.tamanho === tamanhoFilter
-          );
-        }
-
+        // Filtro "apenas com estoque"
         if (apenasComEstoque) {
-          produtosFiltrados = produtosFiltrados.filter(
-            p => p.saldo_fisico_total > 0
-          );
+          gruposFiltrados = gruposFiltrados.map(grupo => ({
+            ...grupo,
+            variacoes: grupo.variacoes.filter(v => v.saldo_fisico_total > 0)
+          }));
         }
 
-        setProdutos(produtosFiltrados);
-        const gruposAgrupados = agruparProdutos(produtosFiltrados);
-        setGrupos(gruposAgrupados);
+        setProdutos(produtosComAtributos);
+        setGrupos(gruposFiltrados);
       } catch (err: any) {
         setError(err.message || 'Erro ao carregar produtos');
       } finally {
@@ -517,6 +531,15 @@ export default function ProdutosPage() {
                           fontWeight: '500'
                         }}>
                           Ver
+                        </Link>
+                        <span style={{ color: '#d1d5db' }}>•</span>
+                        <Link href={`/produtos/grupo/${grupo.pai?.codigo}`} style={{
+                          color: '#8b5cf6',
+                          textDecoration: 'none',
+                          fontSize: '13px',
+                          fontWeight: '500'
+                        }}>
+                          Editar
                         </Link>
                         <span style={{ color: '#d1d5db' }}>•</span>
                         <button
