@@ -59,6 +59,9 @@ export default function EditProdutoPage() {
 
   const [formData, setFormData] = useState({
     nome: '',
+    nomeBase: '',
+    cor: '',
+    tamanho: '',
     preco: '',
     situacao: 'Ativo',
   });
@@ -89,6 +92,9 @@ export default function EditProdutoPage() {
 
         setFormData({
           nome: data.nome || '',
+          nomeBase: base || '',
+          cor: attr.cor || '',
+          tamanho: attr.tamanho || '',
           preco: data.preco?.toString() || '',
           situacao: data.situacao || 'Ativo',
         });
@@ -117,8 +123,8 @@ export default function EditProdutoPage() {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!formData.nome.trim()) {
-      setError('Nome é obrigatório');
+    if (!formData.nomeBase.trim()) {
+      setError('Nome do produto é obrigatório');
       return;
     }
 
@@ -131,6 +137,17 @@ export default function EditProdutoPage() {
       setSaving(true);
       setError(null);
       setSuccess(false);
+
+      // Reconstruir nome com atributos se for variação
+      let nomeFinal = formData.nomeBase;
+      if (ehVariacao) {
+        const atributos = [];
+        if (formData.cor) atributos.push(`COR:${formData.cor}`);
+        if (formData.tamanho) atributos.push(`TAM:${formData.tamanho}`);
+        if (atributos.length > 0) {
+          nomeFinal = `${formData.nomeBase} ${atributos.join(';')}`;
+        }
+      }
 
       // Se for variação e estiver marcado para atualizar todas, avisar
       if (ehVariacao && atualizarTodos && produtosRelacionados.length > 0) {
@@ -167,7 +184,7 @@ export default function EditProdutoPage() {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            nome: formData.nome,
+            nome: nomeFinal,
             preco: parseFloat(formData.preco),
             situacao: formData.situacao,
           }),
@@ -291,10 +308,10 @@ export default function EditProdutoPage() {
       )}
 
       <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {/* Nome */}
+        {/* Nome Base */}
         <div>
           <label
-            htmlFor="nome"
+            htmlFor="nomeBase"
             style={{
               display: 'block',
               marginBottom: '8px',
@@ -302,13 +319,13 @@ export default function EditProdutoPage() {
               fontWeight: '500',
             }}
           >
-            Nome *
+            Nome do Produto *
           </label>
           <input
-            id="nome"
+            id="nomeBase"
             type="text"
-            value={formData.nome}
-            onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+            value={formData.nomeBase}
+            onChange={(e) => setFormData({ ...formData, nomeBase: e.target.value })}
             disabled={saving}
             style={{
               width: '100%',
@@ -320,6 +337,71 @@ export default function EditProdutoPage() {
             }}
           />
         </div>
+
+        {/* Cor e Tamanho - Mostrar apenas se for variação */}
+        {ehVariacao && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div>
+              <label
+                htmlFor="cor"
+                style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                }}
+              >
+                Cor
+              </label>
+              <input
+                id="cor"
+                type="text"
+                value={formData.cor}
+                onChange={(e) => setFormData({ ...formData, cor: e.target.value })}
+                disabled={saving}
+                placeholder="Ex: Azul Claro"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="tamanho"
+                style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                }}
+              >
+                Tamanho
+              </label>
+              <input
+                id="tamanho"
+                type="text"
+                value={formData.tamanho}
+                onChange={(e) => setFormData({ ...formData, tamanho: e.target.value })}
+                disabled={saving}
+                placeholder="Ex: P, M, G, ÚNICO"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Opção de atualizar todas as variações */}
         {ehVariacao && produtosRelacionados.length > 1 && (
