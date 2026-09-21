@@ -107,6 +107,7 @@ export default function ProdutosPage() {
   const [corFilter, setCorFilter] = useState<string>('');
   const [tamanhoFilter, setTamanhoFilter] = useState<string>('');
   const [apenasComEstoque, setApenasComEstoque] = useState(false);
+  const [apenasComPrecoDiferente, setApenasComPrecoDiferente] = useState(false);
   const [cores, setCores] = useState<string[]>([]);
   const [tamanhos, setTamanhos] = useState<string[]>([]);
   const supabase = createSupabaseClientBrowser();
@@ -206,6 +207,13 @@ export default function ProdutosPage() {
           }));
         }
 
+        // Filtro "apenas com preço diferente do pai"
+        if (apenasComPrecoDiferente) {
+          gruposFiltrados = gruposFiltrados.filter(grupo =>
+            grupo.variacoes.some(v => v.preco !== grupo.pai?.preco)
+          );
+        }
+
         // Remover grupos sem variações (ficaram vazios após filtro)
         gruposFiltrados = gruposFiltrados.filter(grupo => grupo.variacoes.length > 0);
 
@@ -219,7 +227,7 @@ export default function ProdutosPage() {
     }
 
     fetchProdutos();
-  }, [search, situacaoFilter, corFilter, tamanhoFilter, apenasComEstoque, supabase]);
+  }, [search, situacaoFilter, corFilter, tamanhoFilter, apenasComEstoque, apenasComPrecoDiferente, supabase]);
 
   function toggleGrupo(index: number) {
     setGrupos(grupos.map((g, i) =>
@@ -356,6 +364,15 @@ export default function ProdutosPage() {
               onChange={(e) => setApenasComEstoque(e.target.checked)}
             />
             Apenas com estoque
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={apenasComPrecoDiferente}
+              onChange={(e) => setApenasComPrecoDiferente(e.target.checked)}
+            />
+            Apenas com preço diferente
           </label>
 
           <button
