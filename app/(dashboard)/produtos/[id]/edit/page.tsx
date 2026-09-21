@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { createSupabaseClientBrowser } from '@/lib/supabase/client';
 import Link from 'next/link';
 
@@ -13,8 +13,10 @@ interface Produto {
   situacao: string;
 }
 
-export default function EditProdutoPage({ params }: { params: { id: string } }) {
+export default function EditProdutoPage() {
   const router = useRouter();
+  const params = useParams();
+  const produtoId = params.id as string;
   const supabase = createSupabaseClientBrowser();
   const [produto, setProduto] = useState<Produto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,7 +39,7 @@ export default function EditProdutoPage({ params }: { params: { id: string } }) 
         const { data, error: fetchError } = await supabase
           .from('bling_produtos')
           .select('*')
-          .eq('id', params.id)
+          .eq('id', produtoId)
           .single();
 
         if (fetchError) throw fetchError;
@@ -56,7 +58,7 @@ export default function EditProdutoPage({ params }: { params: { id: string } }) 
     }
 
     loadProduto();
-  }, [params.id, supabase]);
+  }, [produtoId, supabase]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -76,7 +78,7 @@ export default function EditProdutoPage({ params }: { params: { id: string } }) 
       setError(null);
       setSuccess(false);
 
-      const response = await fetch(`/api/bling/produtos/${params.id}`, {
+      const response = await fetch(`/api/bling/produtos/${produtoId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { createSupabaseClientBrowser } from '@/lib/supabase/client';
 import Link from 'next/link';
 
@@ -18,8 +18,10 @@ interface Produto {
   nome: string;
 }
 
-export default function EditEstoquePage({ params }: { params: { id: string } }) {
+export default function EditEstoquePage() {
   const router = useRouter();
+  const params = useParams();
+  const produtoId = params.id as string;
   const supabase = createSupabaseClientBrowser();
   const [produto, setProduto] = useState<Produto | null>(null);
   const [depositos, setDepositos] = useState<Deposito[]>([]);
@@ -50,7 +52,7 @@ export default function EditEstoquePage({ params }: { params: { id: string } }) 
         const { data: estData, error: estError } = await supabase
           .from('bling_estoque_depositos')
           .select('*')
-          .eq('produto_id', params.id);
+          .eq('produto_id', produtoId);
 
         if (estError) throw estError;
 
@@ -73,7 +75,7 @@ export default function EditEstoquePage({ params }: { params: { id: string } }) 
     }
 
     loadData();
-  }, [params.id, supabase]);
+  }, [produtoId, supabase]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -89,7 +91,7 @@ export default function EditEstoquePage({ params }: { params: { id: string } }) 
         saldoVirtual: parseInt(formData[dep.deposito_id]?.virtual?.toString() || '0'),
       }));
 
-      const response = await fetch(`/api/bling/estoque/${params.id}`, {
+      const response = await fetch(`/api/bling/estoque/${produtoId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ depositos: depositsToUpdate }),
