@@ -128,15 +128,26 @@ export async function POST(req: NextRequest) {
           console.log(`Payload para PATCH:`, JSON.stringify(patchPayload, null, 2));
 
           // Fazer PATCH no produto pai
+          console.log(`Iniciando PATCH em /produtos/${idPai}...`);
           const patchResponse = await blingRequest(`/produtos/${idPai}`, {
             method: 'PATCH',
             body: JSON.stringify(patchPayload),
           });
 
-          console.log(`Produto pai atualizado com nova variação:`, JSON.stringify(patchResponse.data, null, 2));
+          console.log(`Resposta completa do PATCH:`, JSON.stringify(patchResponse, null, 2));
+
+          if (patchResponse && (patchResponse.id || patchResponse.variacoes)) {
+            console.log(`✅ PATCH bem-sucedido! Variação vinculada ao produto ${idPai}`);
+          } else if (!patchResponse || Object.keys(patchResponse || {}).length === 0) {
+            console.warn(`⚠️ PATCH retornou resposta vazia. Verificar se a variação foi vinculada manualmente no Bling`);
+          } else {
+            console.log(`✅ PATCH processado. Resposta:`, patchResponse);
+          }
         } catch (err: any) {
-          console.error(`Erro ao vincular variação ao produto pai ${idPai}:`);
-          console.error(`Mensagem:`, err.message);
+          console.error(`❌ ERRO ao vincular variação ao produto pai ${idPai}:`);
+          console.error(`Mensagem de erro:`, err.message);
+          console.error(`Status HTTP:`, err.status);
+          console.error(`Response:`, err.response);
           console.error(`Erro completo:`, JSON.stringify(err, null, 2));
           // Continuar mesmo se falhar, pois a variação foi criada como produto independente
         }
