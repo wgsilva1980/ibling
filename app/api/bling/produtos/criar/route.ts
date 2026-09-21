@@ -24,45 +24,110 @@ export async function POST(req: NextRequest) {
     console.log(`Criando novo produto no Bling: ${codigo} - ${nome}`);
     console.log(`produtoPaiId recebido: ${produtoPaiId}`);
 
-    // Montar corpo do request
-    // Nota: API Bling v3 não aceita tipo='V'. Variações são criadas como produtos simples (tipo='P')
-    // O agrupamento de variações acontece pelo nome (padrão de atributos como COR:, TAM:)
-    const corpo: any = {
-      codigo,
-      nome,
-      preco: parseFloat(preco.toString()),
-      situacao: situacao === 'Ativo' ? 'A' : 'I',
-      tipo: 'P',
-      formato: 'S',
-    };
+    let response: any = null;
 
-    // Criar no Bling
-    console.log(`Payload enviado para Bling:`, JSON.stringify(corpo, null, 2));
+    // Se tem produto pai, atualizar produto pai com nova variação
+    if (produtoPaiId) {
+      const idPai = typeof produtoPaiId === 'string' ? parseInt(produtoPaiId, 10) : produtoPaiId;
 
-    const response = await blingRequest('/produtos', {
-      method: 'POST',
-      body: JSON.stringify(corpo),
-    });
+      if (isNaN(idPai)) {
+        throw new Error(`produtoPaiId inválido: ${produtoPaiId}`);
+      }
 
-    console.log(`Resposta do Bling:`, JSON.stringify(response, null, 2));
+      console.log(`Atualizando produto pai ${idPai} com nova variação`);
 
-    if (!response.data) {
-      throw new Error('Falha ao criar produto no Bling: resposta vazia');
+      // Buscar produto pai com suas variações atuais
+      const produtoPai = await blingRequest(`/produtos/${idPai}`);
+      console.log(`Produto pai atual:`, JSON.stringify(produtoPai.data, null, 2));
+
+      // Preparar a nova variação
+      const novaVariacao: any = {
+        codigo,
+        nome,
+        preco: parseFloat(preco.toString()),
+        situacao: situacao === 'Ativo' ? 'A' : 'I',
+      };
+
+      // Montar payload do PUT com todas as variações (antigas + nova)
+      const corpoAtualizacao: any = {
+        nome: produtoPai.data.nome,
+        preco: produtoPai.data.preco,
+        situacao: produtoPai.data.situacao,
+        tipo: produtoPai.data.tipo || 'P',
+        formato: produtoPai.data.formato || 'S',
+      };
+
+      // Manter variações antigas
+      if (produtoPai.data.variacoes && Array.isArray(produtoPai.data.variacoes)) {
+        corpoAtualizacao.variacoes = produtoPai.data.variacoes;
+      } else {
+        corpoAtualizacao.variacoes = [];
+      }
+
+      // Adicionar nova variação
+      corpoAtualizacao.variacoes.push(novaVariacao);
+
+      console.log(`Payload para atualizar produto pai:`, JSON.stringify(corpoAtualizacao, null, 2));
+
+      // Atualizar produto pai com nova variação
+      response = await blingRequest(`/produtos/${idPai}`, {
+        method: 'PUT',
+        body: JSON.stringify(corpoAtualizacao),
+      });
+
+      console.log(`Produto pai atualizado:`, JSON.stringify(response.data, null, 2));
+
+      if (!response.data) {
+        throw new Error('Falha ao atualizar produto pai no Bling');
+      }
+    } else {
+      // Criar produto simples sem variações
+      const corpo: any = {
+        codigo,
+        nome,
+        preco: parseFloat(preco.toString()),
+        situacao: situacao === 'Ativo' ? 'A' : 'I',
+        tipo: 'P',
+        formato: 'S',
+      };
+
+      console.log(`Criando produto simples:`, JSON.stringify(corpo, null, 2));
+
+      response = await blingRequest('/produtos', {
+        method: 'POST',
+        body: JSON.stringify(corpo),
+      });
+
+      console.log(`Produto criado:`, JSON.stringify(response.data, null, 2));
+
+      if (!response.data) {
+        throw new Error('Falha ao criar produto no Bling: resposta vazia');
+      }
     }
 
-    const novoId = response.data.id;
-    console.log(`Produto criado com sucesso no Bling: ${novoId}`);
+    // Se criou produto pai com variações, usar o ID do pai. Se criou produto novo, usar o novo ID
+    const novoId = produtoPaiId ? produtoPaiId : response.data.id;
+    console.log(`ID para salvar no Supabase: ${novoId}`);
 
-    // Salvar no Supabase
-    await supabase.from('bling_produtos').insert({
-      id: novoId,
-      codigo,
-      nome,
-      preco: parseFloat(preco.toString()),
-      situacao,
-      raw: response.data,
-      atualizado_em: new Date().toISOString(),
-    });
+    // Salvar/atualizar no Supabase
+    if (produtoPaiId) {
+      // Se é variação, atualizar o produto pai no Supabase
+      await supabase.from('bling_produtos').update({
+        raw: response.data,
+        atualizado_em: new Date().toISOString(),
+      }).eq('id', produtoPaiId);
+    } else {
+      // Se é novo produto, inserir
+      await supabase.from('bling_produtos').insert({
+        id: response.data.id,
+        codigo,
+        nome,
+        preco: parseFloat(preco.toString()),
+        situacao,
+        raw: response.data,
+        atualizado_em: new Date().toISOString(),
+      });
+    }
 
     // Registrar log
     await supabase.from('bling_sync_log').insert({
