@@ -175,13 +175,13 @@ export default function ProdutosPage() {
 
         if (corFilter) {
           produtosFiltrados = produtosFiltrados.filter(
-            p => !p.ehVariacao || p.atributos.cor === corFilter
+            p => p.atributos.cor === corFilter
           );
         }
 
         if (tamanhoFilter) {
           produtosFiltrados = produtosFiltrados.filter(
-            p => !p.ehVariacao || p.atributos.tamanho === tamanhoFilter
+            p => p.atributos.tamanho === tamanhoFilter
           );
         }
 
@@ -192,7 +192,13 @@ export default function ProdutosPage() {
         }
 
         setProdutos(produtosFiltrados);
-        const gruposAgrupados = agruparProdutos(produtosFiltrados);
+        let gruposAgrupados = agruparProdutos(produtosFiltrados);
+
+        // Se há filtro de cor ou tamanho, remover grupos que não têm variações
+        if (corFilter || tamanhoFilter) {
+          gruposAgrupados = gruposAgrupados.filter(g => g.variacoes.length > 0);
+        }
+
         setGrupos(gruposAgrupados);
       } catch (err: any) {
         setError(err.message || 'Erro ao carregar produtos');
