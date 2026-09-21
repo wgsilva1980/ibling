@@ -2,6 +2,30 @@ import { blingRequest } from '@/lib/bling/client';
 import { createSupabaseClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 
+// Função para extrair nome base e atributos do nome do produto
+function extrairAtributos(nome: string) {
+  let nomeBase = nome;
+  const atributos: { [key: string]: string } = {};
+
+  const primeiroAtributo = nome.search(/(?:COR[,:]{1,2}|Cor[,:]{1,2}|TAM[,:]{1,2}|Tam[,:]{1,2}|TAMANHO[,:]{1,2}|Tamanho[,:]{1,2})/i);
+
+  if (primeiroAtributo !== -1) {
+    nomeBase = nome.substring(0, primeiroAtributo).trim();
+  }
+
+  const matchCor = nome.match(/(?:COR[,:]{1,2}|Cor[,:]{1,2})\s*([^;]+)/i);
+  if (matchCor) {
+    atributos['COR'] = matchCor[1].trim();
+  }
+
+  const matchTam = nome.match(/(?:TAM[,:]{1,2}|Tam[,:]{1,2}|TAMANHO[,:]{1,2}|Tamanho[,:]{1,2})\s*([^;]+)/i);
+  if (matchTam) {
+    atributos['TAM'] = matchTam[1].trim();
+  }
+
+  return { nomeBase, atributos };
+}
+
 export async function POST(req: NextRequest) {
   const supabase = createSupabaseClient();
 
@@ -50,47 +74,68 @@ export async function POST(req: NextRequest) {
     const novoId = response.data.id;
     console.log(`Produto criado com sucesso no Bling: ${novoId}`);
 
-    // Passo 2: Se tem produto pai, fazer PUT no pai para reconhecer as variações
+    // Passo 2: Se tem produto pai, gerar combinações de variações
     if (produtoPaiId) {
       const idPai = typeof produtoPaiId === 'string' ? parseInt(produtoPaiId, 10) : produtoPaiId;
 
       if (!isNaN(idPai)) {
         try {
-          console.log(`Atualizando produto pai ${idPai} para reconhecer variações`);
+          console.log(`Gerando combinações de variações para produto pai ${idPai}`);
 
-          // Buscar dados atuais do produto pai
+          // Buscar o produto pai e todas as suas variações
           const produtoPai = await blingRequest(`/produtos/${idPai}`);
-          console.log(`Dados atuais do produto pai:`, JSON.stringify(produtoPai.data, null, 2));
+          const { nomeBase: baseDoGrupo } = extrairAtributos(produtoPai.data.nome);
 
-          // Fazer PUT no produto pai para reconhecer as variações criadas
-          const payloadPai: any = {
-            nome: produtoPai.data.nome,
-            codigo: produtoPai.data.codigo,
-            preco: produtoPai.data.preco,
-            descricaoCurta: produtoPai.data.descricaoCurta || '',
-            situacao: produtoPai.data.situacao,
-            tipo: produtoPai.data.tipo || 'P',
-            formato: produtoPai.data.formato || 'S',
-          };
+          console.log(`Nome base do grupo: ${baseDoGrupo}`);
 
-          // Preservar outros campos importantes
-          if (produtoPai.data.descricaoComplementar) {
-            payloadPai.descricaoComplementar = produtoPai.data.descricaoComplementar;
+          // Buscar todas as variações do grupo (produtos com mesmo nome base)
+          // Fazer uma busca por nome similar no Supabase
+          const { data: todasAsVariacoes } = await supabase
+            .from('bling_produtos')
+            .select('id, nome, codigo, preco, situacao')
+            .ilike('nome', `${baseDoGrupo}%`);
+
+          console.log(`Encontradas ${todasAsVariacoes?.length || 0} variações do grupo`);
+
+          // Agrupar os atributos e suas opções
+          const atributosMap: { [key: string]: Set<string> } = {};
+
+          for (const variacao of todasAsVariacoes || []) {
+            const { atributos } = extrairAtributos(variacao.nome);
+            for (const [nomeAtributo, opcao] of Object.entries(atributos)) {
+              if (!atributosMap[nomeAtributo]) {
+                atributosMap[nomeAtributo] = new Set();
+              }
+              atributosMap[nomeAtributo].add(opcao);
+            }
           }
-          if (produtoPai.data.categoria) {
-            payloadPai.categoria = produtoPai.data.categoria;
+
+          // Converter para formato esperado pela API
+          const atributos = Object.entries(atributosMap).map(([nome, opcoes]) => ({
+            nome,
+            opcoes: Array.from(opcoes).sort(),
+          }));
+
+          console.log(`Atributos encontrados:`, JSON.stringify(atributos, null, 2));
+
+          if (atributos.length > 0) {
+            // Chamar endpoint para gerar combinações
+            const payloadCombinacoes = {
+              id: idPai,
+              atributos,
+            };
+
+            console.log(`Payload para gerar-combinacoes:`, JSON.stringify(payloadCombinacoes, null, 2));
+
+            const combinacoesResponse = await blingRequest('/produtos/variacoes/atributos/gerar-combinacoes', {
+              method: 'POST',
+              body: JSON.stringify(payloadCombinacoes),
+            });
+
+            console.log(`Resposta ao gerar combinações:`, JSON.stringify(combinacoesResponse.data, null, 2));
           }
-
-          console.log(`Payload do PUT no produto pai:`, JSON.stringify(payloadPai, null, 2));
-
-          const putResponse = await blingRequest(`/produtos/${idPai}`, {
-            method: 'PUT',
-            body: JSON.stringify(payloadPai),
-          });
-
-          console.log(`Produto pai atualizado:`, JSON.stringify(putResponse.data, null, 2));
         } catch (err: any) {
-          console.error(`Erro ao atualizar produto pai ${idPai}:`, err.message);
+          console.error(`Erro ao gerar combinações de variações:`, err.message);
           // Continuar mesmo se falhar, pois a variação foi criada
         }
       }
