@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { nome, preco, situacao } = body;
+    const { nome, preco, situacao, produtoPaiId } = body;
 
     if (!nome || !preco) {
       return NextResponse.json(
@@ -23,17 +23,27 @@ export async function POST(req: NextRequest) {
 
     console.log(`Criando novo produto no Bling: ${codigo} - ${nome}`);
 
+    // Montar corpo do request
+    const corpo: any = {
+      codigo,
+      nome,
+      preco: parseFloat(preco.toString()),
+      situacao: situacao === 'Ativo' ? 'A' : 'I',
+      formato: 'S',
+    };
+
+    // Se há produto pai, criar como variação (tipo V)
+    if (produtoPaiId) {
+      corpo.tipo = 'V';
+      corpo.pai = { id: produtoPaiId };
+    } else {
+      corpo.tipo = 'P';
+    }
+
     // Criar no Bling
     const response = await blingRequest('/produtos', {
       method: 'POST',
-      body: JSON.stringify({
-        codigo,
-        nome,
-        preco: parseFloat(preco.toString()),
-        situacao: situacao === 'Ativo' ? 'A' : 'I',
-        tipo: 'P',
-        formato: 'S',
-      }),
+      body: JSON.stringify(corpo),
     });
 
     if (!response.data) {

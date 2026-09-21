@@ -60,6 +60,7 @@ export default function EditarGrupoPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [adicionandoVariacao, setAdicionandoVariacao] = useState(false);
+  const [produtoPaiId, setProdutoPaiId] = useState<number | null>(null);
 
   useEffect(() => {
     async function loadGrupo() {
@@ -78,6 +79,7 @@ export default function EditarGrupoPage() {
           throw new Error('Produto não encontrado');
         }
 
+        setProdutoPaiId(produtoPrincipal.id);
         const { nomeBase: base } = extrairAtributos(produtoPrincipal.nome);
         setNomeBase(base);
 
@@ -194,6 +196,7 @@ export default function EditarGrupoPage() {
               nome,
               preco: p.preco,
               situacao: p.situacao,
+              produtoPaiId,
             }),
           });
         }
