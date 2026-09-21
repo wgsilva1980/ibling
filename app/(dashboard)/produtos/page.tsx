@@ -206,6 +206,9 @@ export default function ProdutosPage() {
           }));
         }
 
+        // Remover grupos sem variações (ficaram vazios após filtro)
+        gruposFiltrados = gruposFiltrados.filter(grupo => grupo.variacoes.length > 0);
+
         setProdutos(produtosComAtributos);
         setGrupos(gruposFiltrados);
       } catch (err: any) {
