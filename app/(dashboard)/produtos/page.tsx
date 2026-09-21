@@ -192,13 +192,7 @@ export default function ProdutosPage() {
         }
 
         setProdutos(produtosFiltrados);
-        let gruposAgrupados = agruparProdutos(produtosFiltrados);
-
-        // Se há filtro de cor ou tamanho, remover grupos que não têm variações
-        if (corFilter || tamanhoFilter) {
-          gruposAgrupados = gruposAgrupados.filter(g => g.variacoes.length > 0);
-        }
-
+        const gruposAgrupados = agruparProdutos(produtosFiltrados);
         setGrupos(gruposAgrupados);
       } catch (err: any) {
         setError(err.message || 'Erro ao carregar produtos');
