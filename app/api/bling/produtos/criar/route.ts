@@ -41,15 +41,22 @@ export async function POST(req: NextRequest) {
       console.log(`Produto pai atual:`, JSON.stringify(produtoPai.data, null, 2));
 
       // Preparar a nova variação
-      // Nota: Variações dentro do array usam tipo='V' e formato='V'
+      // Variações não devem ter tipo nem formato, apenas dados básicos
       const novaVariacao: any = {
         codigo,
         nome,
         preco: parseFloat(preco.toString()),
         situacao: situacao === 'Ativo' ? 'A' : 'I',
-        tipo: 'V',
-        formato: 'V',
       };
+
+      // Manter variações antigas
+      let variacoes: any[] = [];
+      if (produtoPai.data.variacoes && Array.isArray(produtoPai.data.variacoes)) {
+        variacoes = produtoPai.data.variacoes;
+      }
+
+      // Adicionar nova variação
+      variacoes.push(novaVariacao);
 
       // Montar payload do PUT com todas as variações (antigas + nova)
       const corpoAtualizacao: any = {
@@ -57,18 +64,9 @@ export async function POST(req: NextRequest) {
         preco: produtoPai.data.preco,
         situacao: produtoPai.data.situacao,
         tipo: produtoPai.data.tipo || 'P',
-        formato: produtoPai.data.formato || 'S',
+        formato: 'E', // Quando tem variações, formato deve ser 'E' (Estrutura/Com composição)
+        variacoes,
       };
-
-      // Manter variações antigas
-      if (produtoPai.data.variacoes && Array.isArray(produtoPai.data.variacoes)) {
-        corpoAtualizacao.variacoes = produtoPai.data.variacoes;
-      } else {
-        corpoAtualizacao.variacoes = [];
-      }
-
-      // Adicionar nova variação
-      corpoAtualizacao.variacoes.push(novaVariacao);
 
       console.log(`Payload para atualizar produto pai:`, JSON.stringify(corpoAtualizacao, null, 2));
 
