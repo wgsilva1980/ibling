@@ -37,6 +37,18 @@ export async function PUT(
     const tipo = produtoAtual.raw?.tipo || 'P';
     const formato = produtoAtual.raw?.formato || 'S';
 
+    // Se for variação, buscar produto completo do Bling para obter todas as variações
+    let blingProduto: any = null;
+    if (formato === 'V') {
+      try {
+        const response = await blingRequest(`/produtos/${id}`);
+        blingProduto = response.data;
+        console.log(`Produto atual do Bling:`, JSON.stringify(blingProduto, null, 2));
+      } catch (err) {
+        console.error('Erro ao buscar produto do Bling:', err);
+      }
+    }
+
     // Preparar payload para o Bling
     const blingPayload: any = {
       nome,
@@ -48,13 +60,14 @@ export async function PUT(
       formato,
     };
 
-    // Se for variação, incluir variações do produto original
-    if (formato === 'V' && produtoAtual.raw?.variacoes) {
-      blingPayload.variacoes = produtoAtual.raw.variacoes;
+    // Se for variação, incluir variações do Bling
+    if (formato === 'V' && blingProduto?.variacoes) {
+      blingPayload.variacoes = blingProduto.variacoes;
     }
 
     // Atualizar no Bling
     console.log(`Atualizando produto ${id} no Bling`);
+    console.log(`Payload enviado:`, JSON.stringify(blingPayload, null, 2));
     await blingRequest(`/produtos/${id}`, {
       method: 'PUT',
       body: JSON.stringify(blingPayload),
