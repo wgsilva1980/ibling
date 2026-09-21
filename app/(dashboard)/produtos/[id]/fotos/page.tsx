@@ -50,7 +50,12 @@ export default function FotosPage() {
 
         // Extrair fotos do campo raw (imagens do Bling)
         // Tentar múltiplas estruturas possíveis
-        const imagensArray = produtoData?.raw?.imagens || produtoData?.raw?.fotos || [];
+        // As imagens estão em: raw.midia.imagens.internas
+        const imagensArray =
+          produtoData?.raw?.midia?.imagens?.internas ||
+          produtoData?.raw?.imagens ||
+          produtoData?.raw?.fotos ||
+          [];
 
         if (Array.isArray(imagensArray) && imagensArray.length > 0) {
           const fotosFormatadas = imagensArray.map((img: any, idx: number) => ({
@@ -124,7 +129,7 @@ export default function FotosPage() {
         .eq('id', parseInt(produtoId))
         .single();
 
-      const imagensArray = produtoData?.raw?.imagens || produtoData?.raw?.fotos || [];
+      const imagensArray = produtoData?.raw?.midia?.imagens?.internas || produtoData?.raw?.imagens || produtoData?.raw?.fotos || [];
 
       if (Array.isArray(imagensArray) && imagensArray.length > 0) {
         const fotosFormatadas = imagensArray.map((img: any, idx: number) => ({
@@ -172,7 +177,7 @@ export default function FotosPage() {
         .eq('id', parseInt(produtoId))
         .single();
 
-      const imagensArray = produtoData?.raw?.imagens || produtoData?.raw?.fotos || [];
+      const imagensArray = produtoData?.raw?.midia?.imagens?.internas || produtoData?.raw?.imagens || produtoData?.raw?.fotos || [];
 
       if (Array.isArray(imagensArray) && imagensArray.length > 0) {
         const fotosFormatadas = imagensArray.map((img: any, idx: number) => ({
