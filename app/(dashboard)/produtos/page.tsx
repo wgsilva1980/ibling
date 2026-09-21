@@ -40,7 +40,7 @@ export default function ProdutosPage() {
         }
 
         if (situacaoFilter) {
-          query = query.eq('situacao', situacaoFilter);
+          query = query.ilike('situacao', situacaoFilter);
         }
 
         const { data, error: fetchError } = await query;
