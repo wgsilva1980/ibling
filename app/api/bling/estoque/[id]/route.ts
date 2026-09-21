@@ -10,10 +10,10 @@ interface EstoqueUpdate {
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = createSupabaseClient();
-  const produtoId = params.id;
+  const { id: produtoId } = await params;
 
   try {
     const body = await req.json();
