@@ -27,18 +27,21 @@ export async function PUT(
 
     console.log(`Atualizando estoque do produto ${produtoId}`);
 
+    const movimentacoes: any[] = [];
+
     // Atualizar cada depósito no Bling
     for (const dep of depositos) {
       try {
-        // Buscar saldo atual no banco
+        // Buscar saldo atual no banco com nome do depósito
         const { data: saldoAtual } = await supabase
           .from('bling_estoque_depositos')
-          .select('saldo_fisico')
+          .select('saldo_fisico, deposito_nome')
           .eq('produto_id', produtoId)
           .eq('deposito_id', dep.depositoId)
           .single();
 
         const saldoAtualFisico = saldoAtual?.saldo_fisico || 0;
+        const depositoNome = saldoAtual?.deposito_nome || `Depósito ${dep.depositoId}`;
         const novoSaldoFisico = parseInt(dep.saldoFisico.toString());
         const diferenca = novoSaldoFisico - saldoAtualFisico;
 
@@ -46,6 +49,7 @@ export async function PUT(
         if (diferenca !== 0) {
           const tipoOperacao = diferenca > 0 ? 'E' : 'S'; // E = Entrada, S = Saída
           const quantidade = Math.abs(diferenca);
+          const tipoOperacaoNome = tipoOperacao === 'E' ? 'Entrada' : 'Saída';
 
           await blingRequest('/estoques', {
             method: 'POST',
@@ -59,6 +63,16 @@ export async function PUT(
               tipoOperacao,
               quantidade,
             }),
+          });
+
+          // Registrar movimentação para log detalhado
+          movimentacoes.push({
+            deposito_id: dep.depositoId,
+            deposito_nome: depositoNome,
+            tipo_operacao: tipoOperacaoNome,
+            quantidade,
+            saldo_anterior: saldoAtualFisico,
+            saldo_novo: novoSaldoFisico,
           });
         }
 
@@ -86,16 +100,18 @@ export async function PUT(
         .eq('id', produtoId);
     }
 
-    // Registrar no log
-    await supabase.from('bling_sync_log').insert({
-      tipo: 'edição',
-      status: 'sucesso',
-      detalhes: {
-        ação: 'estoque atualizado',
-        produtoId,
-        depositos: depositos.length,
-      },
-    });
+    // Registrar no log com detalhes de cada movimentação
+    if (movimentacoes.length > 0) {
+      await supabase.from('bling_sync_log').insert({
+        tipo: 'movimentação',
+        status: 'sucesso',
+        detalhes: {
+          ação: 'estoque movimentado',
+          produtoId,
+          movimentacoes,
+        },
+      });
+    }
 
     return NextResponse.json(
       { message: 'Estoque atualizado com sucesso' },

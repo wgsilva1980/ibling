@@ -152,6 +152,22 @@ export default function ProdutoDetalhePage() {
             >
               Editar Estoque
             </Link>
+            <Link
+              href={`/produtos/${produtoId}/logs`}
+              style={{
+                padding: '10px 16px',
+                backgroundColor: '#8b5cf6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                textDecoration: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Ver Logs
+            </Link>
           </div>
         </div>
 
