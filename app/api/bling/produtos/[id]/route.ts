@@ -37,19 +37,27 @@ export async function PUT(
     const tipo = produtoAtual.raw?.tipo || 'P';
     const formato = produtoAtual.raw?.formato || 'S';
 
+    // Preparar payload para o Bling
+    const blingPayload: any = {
+      nome,
+      preco: parseFloat(preco.toString()),
+      descricaoCurta: descricaoCurta || '',
+      descricaoComplementar: descricaoComplementar || '',
+      situacao: situacao === 'Ativo' ? 'A' : 'I',
+      tipo,
+      formato,
+    };
+
+    // Se for variação, incluir variações do produto original
+    if (formato === 'V' && produtoAtual.raw?.variacoes) {
+      blingPayload.variacoes = produtoAtual.raw.variacoes;
+    }
+
     // Atualizar no Bling
     console.log(`Atualizando produto ${id} no Bling`);
     await blingRequest(`/produtos/${id}`, {
       method: 'PUT',
-      body: JSON.stringify({
-        nome,
-        preco: parseFloat(preco.toString()),
-        descricaoCurta: descricaoCurta || '',
-        descricaoComplementar: descricaoComplementar || '',
-        situacao: situacao === 'Ativo' ? 'A' : 'I',
-        tipo,
-        formato,
-      }),
+      body: JSON.stringify(blingPayload),
     });
 
     // Atualizar no Supabase
