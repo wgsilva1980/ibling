@@ -14,19 +14,25 @@ export async function POST(req: NextRequest) {
 
     // Produto atualizado
     if (event === 'product.updated' || event === 'product.created') {
-      console.log(`Atualizando produto ${data.id}`);
-      await supabase.from('bling_produtos').upsert(
-        {
-          id: data.id,
-          codigo: data.codigo,
-          nome: data.nome,
-          preco: data.preco,
-          situacao: data.situacao === 'A' ? 'Ativo' : (data.situacao === 'I' ? 'Inativo' : data.situacao),
-          raw: data,
-          atualizado_em: new Date().toISOString(),
-        },
-        { onConflict: 'id' }
-      );
+      // Se o status é 'E' (excluído no Bling), deletar do sistema
+      if (data.situacao === 'E') {
+        console.log(`Produto ${data.id} excluído no Bling, deletando do sistema`);
+        await supabase.from('bling_produtos').delete().eq('id', data.id);
+      } else {
+        console.log(`Atualizando produto ${data.id}`);
+        await supabase.from('bling_produtos').upsert(
+          {
+            id: data.id,
+            codigo: data.codigo,
+            nome: data.nome,
+            preco: data.preco,
+            situacao: data.situacao === 'A' ? 'Ativo' : (data.situacao === 'I' ? 'Inativo' : data.situacao),
+            raw: data,
+            atualizado_em: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
+      }
     }
 
     // Produto deletado
