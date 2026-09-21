@@ -118,7 +118,43 @@ export default function ProdutoDetalhePage() {
         marginBottom: '24px',
         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
       }}>
-        <h1 style={{ marginTop: 0, marginBottom: '24px' }}>{produto.nome}</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '24px' }}>
+          <h1 style={{ marginTop: 0, marginBottom: 0 }}>{produto.nome}</h1>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <Link
+              href={`/produtos/${produtoId}/edit`}
+              style={{
+                padding: '10px 16px',
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                textDecoration: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Editar Produto
+            </Link>
+            <Link
+              href={`/produtos/${produtoId}/estoque`}
+              style={{
+                padding: '10px 16px',
+                backgroundColor: '#f59e0b',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                textDecoration: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Editar Estoque
+            </Link>
+          </div>
+        </div>
 
         <div style={{
           display: 'grid',
