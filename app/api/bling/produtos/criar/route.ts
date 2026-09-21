@@ -41,11 +41,14 @@ export async function POST(req: NextRequest) {
       console.log(`Produto pai atual:`, JSON.stringify(produtoPai.data, null, 2));
 
       // Preparar a nova variação
+      // Nota: Variações dentro do array usam tipo='V' e formato='V'
       const novaVariacao: any = {
         codigo,
         nome,
         preco: parseFloat(preco.toString()),
         situacao: situacao === 'Ativo' ? 'A' : 'I',
+        tipo: 'V',
+        formato: 'V',
       };
 
       // Montar payload do PUT com todas as variações (antigas + nova)
