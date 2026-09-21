@@ -53,10 +53,13 @@ export default function EditarGrupoPage() {
 
   const [nomeBase, setNomeBase] = useState('');
   const [produtos, setProdutos] = useState<ProdutoEditavel[]>([]);
+  const [cores, setCores] = useState<string[]>([]);
+  const [tamanhos, setTamanhos] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [adicionandoVariacao, setAdicionandoVariacao] = useState(false);
 
   useEffect(() => {
     async function loadGrupo() {
@@ -99,6 +102,17 @@ export default function EditarGrupoPage() {
           };
         });
 
+        // Extrair cores e tamanhos únicos
+        const coresUnicas = Array.from(new Set(
+          produtosComAtributos.filter(p => p.cor).map(p => p.cor)
+        )).sort();
+
+        const tamanhoUnicos = Array.from(new Set(
+          produtosComAtributos.filter(p => p.tamanho).map(p => p.tamanho)
+        )).sort();
+
+        setCores(coresUnicas);
+        setTamanhos(tamanhoUnicos);
         setProdutos(produtosComAtributos);
       } catch (err: any) {
         setError(err.message || 'Erro ao carregar grupo');
@@ -110,7 +124,7 @@ export default function EditarGrupoPage() {
     loadGrupo();
   }, [codigo, supabase]);
 
-  function handleChange(index: number, field: string, value: string) {
+  function handleChange(index: number, field: string, value: string | number) {
     const novosProdutos = [...produtos];
     novosProdutos[index] = {
       ...novosProdutos[index],
@@ -118,6 +132,23 @@ export default function EditarGrupoPage() {
       editando: true,
     };
     setProdutos(novosProdutos);
+  }
+
+  function adicionarVariacao() {
+    const novaVariacao: ProdutoEditavel = {
+      id: 0, // Será gerado no backend
+      codigo: '',
+      nome: nomeBase,
+      preco: produtos[0]?.preco || 0,
+      situacao: 'Ativo',
+      saldo_fisico_total: 0,
+      cor: '',
+      tamanho: '',
+      nomeBase,
+      editando: true,
+    };
+    setProdutos([...produtos, novaVariacao]);
+    setAdicionandoVariacao(true);
   }
 
   async function handleSalvar() {
@@ -260,7 +291,8 @@ export default function EditarGrupoPage() {
                     value={produto.cor}
                     onChange={(e) => handleChange(idx, 'cor', e.target.value)}
                     disabled={saving}
-                    placeholder="Ex: Azul"
+                    placeholder="Digite ou selecione"
+                    list={`cores-list-${idx}`}
                     style={{
                       width: '100%',
                       padding: '6px 8px',
@@ -270,6 +302,11 @@ export default function EditarGrupoPage() {
                       boxSizing: 'border-box',
                     }}
                   />
+                  <datalist id={`cores-list-${idx}`}>
+                    {cores.map(cor => (
+                      <option key={cor} value={cor} />
+                    ))}
+                  </datalist>
                 </td>
                 <td style={{ padding: '8px' }}>
                   <input
@@ -277,7 +314,8 @@ export default function EditarGrupoPage() {
                     value={produto.tamanho}
                     onChange={(e) => handleChange(idx, 'tamanho', e.target.value)}
                     disabled={saving}
-                    placeholder="Ex: P, M, G"
+                    placeholder="Digite ou selecione"
+                    list={`tamanhos-list-${idx}`}
                     style={{
                       width: '100%',
                       padding: '6px 8px',
@@ -287,6 +325,11 @@ export default function EditarGrupoPage() {
                       boxSizing: 'border-box',
                     }}
                   />
+                  <datalist id={`tamanhos-list-${idx}`}>
+                    {tamanhos.map(tam => (
+                      <option key={tam} value={tam} />
+                    ))}
+                  </datalist>
                 </td>
                 <td style={{ padding: '8px' }}>
                   <input
@@ -331,6 +374,26 @@ export default function EditarGrupoPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Botão de nova variação */}
+      <div style={{ marginBottom: '16px' }}>
+        <button
+          onClick={adicionarVariacao}
+          disabled={saving}
+          style={{
+            padding: '10px 16px',
+            backgroundColor: '#3b82f6',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            cursor: saving ? 'not-allowed' : 'pointer',
+          }}
+        >
+          + Nova Variação
+        </button>
       </div>
 
       {/* Botões de ação */}
