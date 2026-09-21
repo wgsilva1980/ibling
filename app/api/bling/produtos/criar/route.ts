@@ -23,34 +23,58 @@ export async function POST(req: NextRequest) {
 
     console.log(`Criando novo produto no Bling: ${codigo} - ${nome}`);
 
+    // Se há produto pai, criar como variação (tipo V)
+    let isVariacao = false;
+    let produtoMae: any = null;
+
+    if (produtoPaiId) {
+      // Buscar dados do produto pai para usar o mesmo formato
+      try {
+        const response = await blingRequest(`/produtos/${produtoPaiId}`);
+        produtoMae = response.data;
+      } catch (err) {
+        console.error('Erro ao buscar produto pai:', err);
+      }
+      isVariacao = true;
+    }
+
     // Montar corpo do request
     const corpo: any = {
       codigo,
       nome,
       preco: parseFloat(preco.toString()),
       situacao: situacao === 'Ativo' ? 'A' : 'I',
-      formato: 'S',
     };
 
-    // Se há produto pai, criar como variação (tipo V)
-    if (produtoPaiId) {
+    // Adicionar formato apenas para produtos simples, não para variações
+    if (!isVariacao) {
+      corpo.formato = 'S';
+      corpo.tipo = 'P';
+    } else {
       corpo.tipo = 'V';
       corpo.pai = { id: produtoPaiId };
-    } else {
-      corpo.tipo = 'P';
+      // Usar formato do produto pai se disponível
+      if (produtoMae?.formato) {
+        corpo.formato = produtoMae.formato;
+      }
     }
 
     // Criar no Bling
+    console.log(`Payload enviado para Bling:`, JSON.stringify(corpo, null, 2));
+
     const response = await blingRequest('/produtos', {
       method: 'POST',
       body: JSON.stringify(corpo),
     });
 
+    console.log(`Resposta do Bling:`, JSON.stringify(response, null, 2));
+
     if (!response.data) {
-      throw new Error('Falha ao criar produto no Bling');
+      throw new Error('Falha ao criar produto no Bling: resposta vazia');
     }
 
     const novoId = response.data.id;
+    console.log(`Produto criado com sucesso no Bling: ${novoId}`);
 
     // Salvar no Supabase
     await supabase.from('bling_produtos').insert({
