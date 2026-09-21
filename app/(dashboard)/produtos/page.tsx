@@ -410,16 +410,27 @@ export default function ProdutosPage() {
                         {grupo.pai?.situacao || '—'}
                       </span>
                     </td>
-                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                    <td style={{ padding: '12px', textAlign: 'center', display: 'flex', gap: '8px', justifyContent: 'center' }}>
                       {grupo.pai && (
-                        <Link href={`/produtos/${grupo.pai.id}`} style={{
-                          color: '#0066cc',
-                          textDecoration: 'none',
-                          fontSize: '14px',
-                          fontWeight: '500'
-                        }}>
-                          Ver
-                        </Link>
+                        <>
+                          <Link href={`/produtos/${grupo.pai.id}`} style={{
+                            color: '#0066cc',
+                            textDecoration: 'none',
+                            fontSize: '14px',
+                            fontWeight: '500'
+                          }}>
+                            Ver
+                          </Link>
+                          <span style={{ color: '#d1d5db' }}>•</span>
+                          <Link href={`/produtos/grupo/${grupo.pai.codigo}`} style={{
+                            color: '#8b5cf6',
+                            textDecoration: 'none',
+                            fontSize: '14px',
+                            fontWeight: '500'
+                          }}>
+                            Editar
+                          </Link>
+                        </>
                       )}
                     </td>
                   </tr>
