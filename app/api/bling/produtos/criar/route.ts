@@ -7,14 +7,19 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { codigo, nome, preco, situacao } = body;
+    const { nome, preco, situacao } = body;
 
-    if (!codigo || !nome || !preco) {
+    if (!nome || !preco) {
       return NextResponse.json(
-        { error: 'Código, nome e preço são obrigatórios' },
+        { error: 'Nome e preço são obrigatórios' },
         { status: 400 }
       );
     }
+
+    // Gerar SKU automaticamente baseado no timestamp + random
+    const timestamp = Date.now().toString().slice(-4);
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const codigo = `VAR-${timestamp}-${random}`;
 
     console.log(`Criando novo produto no Bling: ${codigo} - ${nome}`);
 

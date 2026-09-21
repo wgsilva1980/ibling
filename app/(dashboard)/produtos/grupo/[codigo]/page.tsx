@@ -162,11 +162,6 @@ export default function EditarGrupoPage() {
     // Validar novas variações
     const novasVariacoes = produtosComMudancas.filter(p => p.id === 0);
     for (const variacao of novasVariacoes) {
-      if (!variacao.codigo.trim()) {
-        setError('Novas variações precisam de um código (SKU)');
-        setSaving(false);
-        return;
-      }
       if (!variacao.cor && !variacao.tamanho) {
         setError('Novas variações precisam de Cor ou Tamanho');
         setSaving(false);
@@ -312,26 +307,11 @@ export default function EditarGrupoPage() {
                   borderBottom: '1px solid #e5e7eb',
                 }}
               >
-                <td style={{ padding: '8px' }}>
+                <td style={{ padding: '12px', fontSize: '14px', fontFamily: 'monospace' }}>
                   {produto.id === 0 ? (
-                    <input
-                      type="text"
-                      value={produto.codigo}
-                      onChange={(e) => handleChange(idx, 'codigo', e.target.value)}
-                      disabled={saving}
-                      placeholder="Ex: SKU-001"
-                      style={{
-                        width: '100%',
-                        padding: '6px 8px',
-                        border: '1px solid #f97316',
-                        borderRadius: '4px',
-                        fontSize: '13px',
-                        boxSizing: 'border-box',
-                        backgroundColor: '#fff7ed',
-                      }}
-                    />
+                    <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Auto</span>
                   ) : (
-                    <span style={{ fontSize: '14px', fontFamily: 'monospace' }}>{produto.codigo}</span>
+                    produto.codigo
                   )}
                 </td>
                 <td style={{ padding: '8px' }}>
