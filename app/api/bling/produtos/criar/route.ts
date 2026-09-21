@@ -131,12 +131,27 @@ export async function POST(req: NextRequest) {
 
             console.log(`Payload para produtovariacao/atributo:`, JSON.stringify(payloadVariacao, null, 2));
 
-            const variacaoResponse = await blingRequest('/produtovariacao/atributo', {
+            // Endpoint de variações usa base URL diferente (www.bling.com.br, não api.bling.com.br)
+            const { getValidAccessToken } = await import('@/lib/bling/auth');
+            const token = await getValidAccessToken();
+
+            const variacaoUrl = 'https://www.bling.com.br/Api/v3/produtovariacao/atributo';
+            const variacaoFetch = await fetch(variacaoUrl, {
               method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
               body: JSON.stringify(payloadVariacao),
             });
 
-            console.log(`Produto pai com variações vinculadas:`, JSON.stringify(variacaoResponse.data, null, 2));
+            if (!variacaoFetch.ok) {
+              const errorText = await variacaoFetch.text();
+              throw new Error(`Erro ao vincular variações: ${variacaoFetch.status} - ${errorText}`);
+            }
+
+            const variacaoResponse = await variacaoFetch.json();
+            console.log(`Produto pai com variações vinculadas:`, JSON.stringify(variacaoResponse, null, 2));
           }
         } catch (err: any) {
           console.error(`Erro ao vincular variações ao produto pai ${idPai}:`);
