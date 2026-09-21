@@ -37,22 +37,23 @@ function extrairAtributos(nome: string): { nomeBase: string; atributos: Atributo
   const atributos: Atributos = {};
   let nomeBase = nome;
 
-  // Encontrar o índice do primeiro atributo (COR:, Cor:, TAM:, Tam:, etc)
-  const primeiroAtributo = nome.search(/(?:COR:|Cor:|TAM:|Tam:)/i);
+  // Encontrar o índice do primeiro atributo (COR:, TAM:, TAMANHO:, etc)
+  // Suporta: COR:, Cor:, COR,: (com vírgula), TAM:, Tam:, TAMANHO:, Tamanho:
+  const primeiroAtributo = nome.search(/(?:COR[,:]{1,2}|Cor[,:]{1,2}|TAM[,:]{1,2}|Tam[,:]{1,2}|TAMANHO[,:]{1,2}|Tamanho[,:]{1,2})/i);
 
   if (primeiroAtributo !== -1) {
     // Tudo antes do primeiro atributo é o nome base
     nomeBase = nome.substring(0, primeiroAtributo).trim();
   }
 
-  // Extrair COR
-  const matchCor = nome.match(/(?:COR:|Cor:)\s*([^;]+)/i);
+  // Extrair COR (suporta COR: e COR,: com vírgula)
+  const matchCor = nome.match(/(?:COR[,:]{1,2}|Cor[,:]{1,2})\s*([^;]+)/i);
   if (matchCor) {
     atributos.cor = matchCor[1].trim();
   }
 
-  // Extrair TAM
-  const matchTam = nome.match(/(?:TAM:|Tam:)\s*([^;]+)/i);
+  // Extrair TAM ou TAMANHO
+  const matchTam = nome.match(/(?:TAM[,:]{1,2}|Tam[,:]{1,2}|TAMANHO[,:]{1,2}|Tamanho[,:]{1,2})\s*([^;]+)/i);
   if (matchTam) {
     atributos.tamanho = matchTam[1].trim();
   }
