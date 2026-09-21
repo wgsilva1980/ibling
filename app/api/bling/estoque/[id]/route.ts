@@ -5,7 +5,6 @@ import { NextRequest, NextResponse } from 'next/server';
 interface EstoqueUpdate {
   depositoId: number;
   saldoFisico: number;
-  saldoVirtual: number;
 }
 
 export async function PUT(
@@ -66,7 +65,6 @@ export async function PUT(
         // Atualizar no Supabase
         await supabase.from('bling_estoque_depositos').update({
           saldo_fisico: novoSaldoFisico,
-          saldo_virtual: parseInt(dep.saldoVirtual.toString()),
           atualizado_em: new Date().toISOString(),
         }).eq('produto_id', produtoId).eq('deposito_id', dep.depositoId);
       } catch (depError) {

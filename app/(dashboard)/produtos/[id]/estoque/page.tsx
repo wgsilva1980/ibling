@@ -9,13 +9,17 @@ interface Deposito {
   deposito_id: number;
   deposito_nome: string;
   saldo_fisico: number;
-  saldo_virtual: number;
 }
 
 interface Produto {
   id: number;
   codigo: string;
   nome: string;
+}
+
+interface FormDataItem {
+  operacao: 'entrada' | 'saida';
+  quantidade: number;
 }
 
 export default function EditEstoquePage() {
@@ -30,7 +34,7 @@ export default function EditEstoquePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const [formData, setFormData] = useState<Record<number, { fisico: number; virtual: number }>>({});
+  const [formData, setFormData] = useState<Record<number, FormDataItem>>({});
 
   useEffect(() => {
     async function loadData() {
@@ -59,11 +63,11 @@ export default function EditEstoquePage() {
         setDepositos(estData || []);
 
         // Inicializar form
-        const initialForm: Record<number, { fisico: number; virtual: number }> = {};
+        const initialForm: Record<number, FormDataItem> = {};
         (estData || []).forEach((dep) => {
           initialForm[dep.deposito_id] = {
-            fisico: dep.saldo_fisico,
-            virtual: dep.saldo_virtual,
+            operacao: 'entrada',
+            quantidade: 0,
           };
         });
         setFormData(initialForm);
@@ -85,11 +89,25 @@ export default function EditEstoquePage() {
       setError(null);
       setSuccess(false);
 
-      const depositsToUpdate = depositos.map((dep) => ({
-        depositoId: dep.deposito_id,
-        saldoFisico: parseInt(formData[dep.deposito_id]?.fisico?.toString() || '0'),
-        saldoVirtual: parseInt(formData[dep.deposito_id]?.virtual?.toString() || '0'),
-      }));
+      // Validar se há operações
+      const temOperacoes = depositos.some((dep) => formData[dep.deposito_id]?.quantidade > 0);
+      if (!temOperacoes) {
+        setError('Adicione pelo menos uma operação de estoque');
+        setSaving(false);
+        return;
+      }
+
+      const depositsToUpdate = depositos.map((dep) => {
+        const form = formData[dep.deposito_id];
+        const novoSaldo = form?.operacao === 'entrada'
+          ? dep.saldo_fisico + (form?.quantidade || 0)
+          : dep.saldo_fisico - (form?.quantidade || 0);
+
+        return {
+          depositoId: dep.deposito_id,
+          saldoFisico: Math.max(0, novoSaldo),
+        };
+      });
 
       const response = await fetch(`/api/bling/estoque/${produtoId}`, {
         method: 'PUT',
@@ -194,71 +212,96 @@ export default function EditEstoquePage() {
                     Depósito
                   </th>
                   <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
-                    Saldo Físico
+                    Saldo Atual
                   </th>
                   <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
-                    Saldo Virtual
+                    Operação
+                  </th>
+                  <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
+                    Quantidade
+                  </th>
+                  <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
+                    Novo Saldo
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {depositos.map((dep) => (
-                  <tr key={dep.deposito_id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '12px', fontSize: '14px' }}>
-                      {dep.deposito_nome}
-                    </td>
-                    <td style={{ padding: '12px', textAlign: 'center' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        value={formData[dep.deposito_id]?.fisico ?? dep.saldo_fisico}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            [dep.deposito_id]: {
-                              ...formData[dep.deposito_id],
-                              fisico: parseInt(e.target.value || '0'),
-                            },
-                          })
-                        }
-                        disabled={saving}
-                        style={{
-                          width: '80px',
-                          padding: '8px',
-                          border: '1px solid #ddd',
-                          borderRadius: '4px',
-                          fontSize: '14px',
-                          textAlign: 'center',
-                        }}
-                      />
-                    </td>
-                    <td style={{ padding: '12px', textAlign: 'center' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        value={formData[dep.deposito_id]?.virtual ?? dep.saldo_virtual}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            [dep.deposito_id]: {
-                              ...formData[dep.deposito_id],
-                              virtual: parseInt(e.target.value || '0'),
-                            },
-                          })
-                        }
-                        disabled={saving}
-                        style={{
-                          width: '80px',
-                          padding: '8px',
-                          border: '1px solid #ddd',
-                          borderRadius: '4px',
-                          fontSize: '14px',
-                          textAlign: 'center',
-                        }}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {depositos.map((dep) => {
+                  const form = formData[dep.deposito_id];
+                  const novoSaldo = form?.operacao === 'entrada'
+                    ? dep.saldo_fisico + (form?.quantidade || 0)
+                    : dep.saldo_fisico - (form?.quantidade || 0);
+
+                  return (
+                    <tr key={dep.deposito_id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                      <td style={{ padding: '12px', fontSize: '14px' }}>
+                        {dep.deposito_nome}
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: '500' }}>
+                        {dep.saldo_fisico}
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                        <select
+                          value={form?.operacao || 'entrada'}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              [dep.deposito_id]: {
+                                ...formData[dep.deposito_id],
+                                operacao: e.target.value as 'entrada' | 'saida',
+                              },
+                            })
+                          }
+                          disabled={saving}
+                          style={{
+                            padding: '8px',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            fontSize: '14px',
+                          }}
+                        >
+                          <option value="entrada">➕ Entrada</option>
+                          <option value="saida">➖ Saída</option>
+                        </select>
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          value={form?.quantidade || 0}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              [dep.deposito_id]: {
+                                ...formData[dep.deposito_id],
+                                quantidade: parseInt(e.target.value || '0'),
+                              },
+                            })
+                          }
+                          disabled={saving}
+                          placeholder="0"
+                          style={{
+                            width: '80px',
+                            padding: '8px',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            fontSize: '14px',
+                            textAlign: 'center',
+                          }}
+                        />
+                      </td>
+                      <td style={{
+                        padding: '12px',
+                        textAlign: 'center',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: novoSaldo < 0 ? '#c00' : '#060',
+                      }}>
+                        {Math.max(0, novoSaldo)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
