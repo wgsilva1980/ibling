@@ -74,91 +74,71 @@ export async function POST(req: NextRequest) {
     const novoId = response.data.id;
     console.log(`Produto criado com sucesso no Bling: ${novoId}`);
 
-    // Passo 2: Se tem produto pai, gerar combinações de variações
+    // Passo 2: Se tem produto pai, vincular a nova variação ao produto pai
     if (produtoPaiId) {
       const idPai = typeof produtoPaiId === 'string' ? parseInt(produtoPaiId, 10) : produtoPaiId;
 
       if (!isNaN(idPai)) {
         try {
-          console.log(`Gerando combinações de variações para produto pai ${idPai}`);
+          console.log(`Vinculando variação ao produto pai ${idPai}`);
 
-          // Buscar o produto pai e todas as suas variações
-          const produtoPai = await blingRequest(`/produtos/${idPai}`);
-          const { nomeBase: baseDoGrupo } = extrairAtributos(produtoPai.data.nome);
+          // Buscar o produto pai com todas as suas variações
+          const produtoPaiResponse = await blingRequest(`/produtos/${idPai}`);
+          const produtoPai = produtoPaiResponse.data;
 
-          console.log(`Nome base do grupo: ${baseDoGrupo}`);
+          console.log(`Produto pai encontrado: ${produtoPai.nome}`);
+          console.log(`Variações existentes: ${produtoPai.variacoes?.length || 0}`);
 
-          // Buscar todas as variações do grupo (produtos com mesmo nome base)
-          // Fazer uma busca por nome similar no Supabase
-          const { data: todasAsVariacoes } = await supabase
-            .from('bling_produtos')
-            .select('id, nome, codigo, preco, situacao')
-            .ilike('nome', `${baseDoGrupo}%`);
+          // Preparar payload para PATCH: incluir todas as variações existentes + nova
+          const variacoes: any[] = [];
 
-          console.log(`Encontradas ${todasAsVariacoes?.length || 0} variações do grupo`);
-
-          // Agrupar os atributos e suas opções
-          const atributosMap: { [key: string]: Set<string> } = {};
-
-          for (const variacao of todasAsVariacoes || []) {
-            const { atributos } = extrairAtributos(variacao.nome);
-            for (const [nomeAtributo, opcao] of Object.entries(atributos)) {
-              if (!atributosMap[nomeAtributo]) {
-                atributosMap[nomeAtributo] = new Set();
-              }
-              atributosMap[nomeAtributo].add(opcao);
+          // Adicionar variações existentes com seus IDs
+          if (produtoPai.variacoes && Array.isArray(produtoPai.variacoes)) {
+            for (const varExistente of produtoPai.variacoes) {
+              variacoes.push({
+                id: varExistente.id,
+              });
             }
           }
 
-          // Converter para formato esperado pela API
-          const atributos = Object.entries(atributosMap).map(([nome, opcoes]) => ({
-            nome,
-            opcoes: Array.from(opcoes).sort(),
-          }));
+          // Adicionar a nova variação
+          variacoes.push({
+            nomeVariacao: nome,
+            tipo: 'P',
+            formato: 'S',
+            codigo: codigo,
+            preco: parseFloat(preco.toString()),
+            situacao: situacao === 'Ativo' ? 'A' : 'I',
+          });
 
-          console.log(`Atributos encontrados:`, JSON.stringify(atributos, null, 2));
+          console.log(`Total de variações (existentes + nova): ${variacoes.length}`);
 
-          if (atributos.length > 0) {
-            // Chamar endpoint correto: POST /Api/v3/produtovariacao/atributo
-            const payloadVariacao = {
-              idProdutoPai: idPai.toString(),
-              atributos: atributos.map(attr => ({
-                nome: attr.nome,
-                opcoes: attr.opcoes,
-                opcaoUnica: attr.opcoes.length === 1,
-              })),
-            };
+          // Preparar payload para PATCH
+          const patchPayload = {
+            nome: produtoPai.nome,
+            codigo: produtoPai.codigo,
+            preco: produtoPai.preco,
+            tipo: produtoPai.tipo,
+            formato: 'V', // Garantir que é formato variação
+            situacao: produtoPai.situacao,
+            unidade: produtoPai.unidade || 'UN',
+            variacoes: variacoes,
+          };
 
-            console.log(`Payload para produtovariacao/atributo:`, JSON.stringify(payloadVariacao, null, 2));
+          console.log(`Payload para PATCH:`, JSON.stringify(patchPayload, null, 2));
 
-            // Endpoint de variações usa base URL diferente (www.bling.com.br, não api.bling.com.br)
-            const { getValidAccessToken } = await import('@/lib/bling/auth');
-            const token = await getValidAccessToken();
+          // Fazer PATCH no produto pai
+          const patchResponse = await blingRequest(`/produtos/${idPai}`, {
+            method: 'PATCH',
+            body: JSON.stringify(patchPayload),
+          });
 
-            const variacaoUrl = 'https://www.bling.com.br/Api/v3/produtovariacao/atributo';
-            const variacaoFetch = await fetch(variacaoUrl, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(payloadVariacao),
-            });
-
-            if (!variacaoFetch.ok) {
-              const errorText = await variacaoFetch.text();
-              throw new Error(`Erro ao vincular variações: ${variacaoFetch.status} - ${errorText}`);
-            }
-
-            const variacaoResponse = await variacaoFetch.json();
-            console.log(`Produto pai com variações vinculadas:`, JSON.stringify(variacaoResponse, null, 2));
-          }
+          console.log(`Produto pai atualizado com nova variação:`, JSON.stringify(patchResponse.data, null, 2));
         } catch (err: any) {
-          console.error(`Erro ao vincular variações ao produto pai ${idPai}:`);
+          console.error(`Erro ao vincular variação ao produto pai ${idPai}:`);
           console.error(`Mensagem:`, err.message);
-          console.error(`Stack:`, err.stack);
           console.error(`Erro completo:`, JSON.stringify(err, null, 2));
-          // Continuar mesmo se falhar, pois a variação foi criada
+          // Continuar mesmo se falhar, pois a variação foi criada como produto independente
         }
       }
     }
