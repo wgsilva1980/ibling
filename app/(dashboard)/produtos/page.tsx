@@ -229,6 +229,27 @@ export default function ProdutosPage() {
     }
   }
 
+  async function handleDeletar(id: number) {
+    if (!window.confirm('Tem certeza que deseja deletar este produto?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/bling/produtos/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao deletar');
+      }
+
+      // Recarregar produtos
+      window.location.reload();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao deletar produto');
+    }
+  }
+
   return (
     <div>
       <div style={{ marginBottom: '24px' }}>
@@ -430,6 +451,21 @@ export default function ProdutosPage() {
                           }}>
                             Editar
                           </Link>
+                          <span style={{ color: '#d1d5db' }}>•</span>
+                          <button
+                            onClick={() => handleDeletar(grupo.pai!.id)}
+                            style={{
+                              color: '#dc2626',
+                              background: 'none',
+                              border: 'none',
+                              fontSize: '14px',
+                              fontWeight: '500',
+                              cursor: 'pointer',
+                              padding: 0,
+                            }}
+                          >
+                            Deletar
+                          </button>
                         </>
                       )}
                     </td>

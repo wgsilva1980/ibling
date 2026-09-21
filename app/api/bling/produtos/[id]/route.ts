@@ -112,3 +112,55 @@ export async function PUT(
     );
   }
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = createSupabaseClient();
+  const { id } = await params;
+
+  try {
+    console.log(`Deletando produto ${id}`);
+
+    // Deletar do Supabase
+    const { error: deleteError } = await supabase
+      .from('bling_produtos')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      throw deleteError;
+    }
+
+    // Registrar no log
+    await supabase.from('bling_sync_log').insert({
+      tipo: 'deleção',
+      status: 'sucesso',
+      detalhes: { ação: 'produto deletado', id },
+    });
+
+    return NextResponse.json(
+      { message: 'Produto deletado com sucesso' },
+      { status: 200 }
+    );
+  } catch (error: any) {
+    console.error('Erro ao deletar produto:', error);
+
+    try {
+      const supabase = createSupabaseClient();
+      await supabase.from('bling_sync_log').insert({
+        tipo: 'deleção',
+        status: 'erro',
+        detalhes: { ação: 'falha ao deletar produto', id, erro: error.message },
+      });
+    } catch (logError) {
+      console.error('Erro ao registrar erro:', logError);
+    }
+
+    return NextResponse.json(
+      { error: error.message || 'Erro ao deletar produto' },
+      { status: 500 }
+    );
+  }
+}
