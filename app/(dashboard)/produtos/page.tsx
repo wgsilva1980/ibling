@@ -181,7 +181,6 @@ export default function ProdutosPage() {
                   key={produto.id}
                   style={{
                     borderBottom: '1px solid #e5e7eb',
-                    '&:hover': { backgroundColor: '#f9fafb' }
                   }}
                 >
                   <td style={{ padding: '12px', fontSize: '14px', fontFamily: 'monospace' }}>
