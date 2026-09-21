@@ -7,42 +7,42 @@ export async function POST(req: NextRequest) {
 
   try {
     const payload = await req.json();
-    console.log('Webhook payload completo:', JSON.stringify(payload, null, 2));
+    const event = payload.event as string;
+    const data = payload.data;
 
-    // Bling pode enviar em diferentes formatos
-    const evento = (payload.evento || payload.type || payload.event) as string;
-    const dados = payload.dados || payload.data || payload;
+    console.log(`Webhook recebido: ${event}`);
 
-    console.log(`Webhook recebido: ${evento}`);
-
-    // Tratar eventos de produto
-    if (evento?.includes('produto')) {
-      if (evento.includes('excluido')) {
-        console.log(`Deletando produto ${dados.id}`);
-        await supabase.from('bling_produtos').delete().eq('id', dados.id);
-      } else {
-        console.log(`Atualizando produto ${dados.id}`);
-        await supabase.from('bling_produtos').upsert(
-          {
-            id: dados.id,
-            codigo: dados.codigo,
-            nome: dados.nome,
-            preco: dados.preco,
-            situacao: dados.situacao,
-            raw: dados,
-            atualizado_em: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
-        );
-      }
+    // Produto atualizado
+    if (event === 'product.updated' || event === 'product.created') {
+      console.log(`Atualizando produto ${data.id}`);
+      await supabase.from('bling_produtos').upsert(
+        {
+          id: data.id,
+          codigo: data.codigo,
+          nome: data.nome,
+          preco: data.preco,
+          situacao: data.situacao === 'A' ? 'Ativo' : 'Inativo',
+          raw: data,
+          atualizado_em: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      );
     }
 
-    // Tratar eventos de estoque
-    if (evento?.includes('estoque')) {
-      console.log(`Atualizando estoque do produto ${dados.produto.id}`);
+    // Produto deletado
+    if (event === 'product.deleted') {
+      console.log(`Deletando produto ${data.id}`);
+      await supabase.from('bling_produtos').delete().eq('id', data.id);
+    }
+
+    // Estoque alterado - buscar dados atualizados
+    if (event === 'stock.updated' || event.includes('stock')) {
       try {
+        const produtoId = data.produto?.id || data.id;
+        console.log(`Atualizando estoque do produto ${produtoId}`);
+
         const estoqueResp = await blingRequest(
-          `/estoques/saldos?idsProdutos[]=${dados.produto.id}`
+          `/estoques/saldos?idsProdutos[]=${produtoId}`
         );
 
         const item = estoqueResp.data?.[0];
