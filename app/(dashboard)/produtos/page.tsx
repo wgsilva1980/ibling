@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import React from 'react';
 import { createSupabaseClientBrowser } from '@/lib/supabase/client';
 import Link from 'next/link';
 
@@ -13,12 +14,93 @@ interface Produto {
   saldo_fisico_total: number;
 }
 
+interface Atributos {
+  cor?: string;
+  tamanho?: string;
+}
+
+interface ProdutoComAtributos extends Produto {
+  atributos: Atributos;
+  ehVariacao: boolean;
+}
+
+interface GrupoProduto {
+  nomeBase: string;
+  pai?: ProdutoComAtributos;
+  variacoes: ProdutoComAtributos[];
+  estoqueTotal: number;
+  expandido: boolean;
+}
+
+// Extrair nome base e atributos do nome do produto
+function extrairAtributos(nome: string): { nomeBase: string; atributos: Atributos } {
+  const atributos: Atributos = {};
+  let nomeBase = nome;
+
+  // Extrair COR
+  const matchCor = nome.match(/(?:COR:|Cor:)\s*([^;]+)/i);
+  if (matchCor) {
+    atributos.cor = matchCor[1].trim();
+    nomeBase = nome.split(/(?:COR:|Cor:)/i)[0].trim();
+  }
+
+  // Extrair TAM
+  const matchTam = nome.match(/(?:TAM:|Tam:)\s*([^;]+)/i);
+  if (matchTam) {
+    atributos.tamanho = matchTam[1].trim();
+  }
+
+  return { nomeBase, atributos };
+}
+
+// Agrupar produtos por nome base
+function agruparProdutos(produtos: Produto[]): GrupoProduto[] {
+  const grupos: Map<string, GrupoProduto> = new Map();
+
+  produtos.forEach((prod) => {
+    const { nomeBase, atributos } = extrairAtributos(prod.nome);
+    const ehVariacao = prod.nome !== nomeBase;
+
+    if (!grupos.has(nomeBase)) {
+      grupos.set(nomeBase, {
+        nomeBase,
+        variacoes: [],
+        estoqueTotal: 0,
+        expandido: false,
+      });
+    }
+
+    const grupo = grupos.get(nomeBase)!;
+    const produtoComAtributos: ProdutoComAtributos = {
+      ...prod,
+      atributos,
+      ehVariacao,
+    };
+
+    if (ehVariacao) {
+      grupo.variacoes.push(produtoComAtributos);
+    } else {
+      grupo.pai = produtoComAtributos;
+    }
+
+    grupo.estoqueTotal += prod.saldo_fisico_total;
+  });
+
+  return Array.from(grupos.values());
+}
+
 export default function ProdutosPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [grupos, setGrupos] = useState<GrupoProduto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [situacaoFilter, setSituacaoFilter] = useState<string>('');
+  const [corFilter, setCorFilter] = useState<string>('');
+  const [tamanhoFilter, setTamanhoFilter] = useState<string>('');
+  const [apenasComEstoque, setApenasComEstoque] = useState(false);
+  const [cores, setCores] = useState<string[]>([]);
+  const [tamanhos, setTamanhos] = useState<string[]>([]);
   const supabase = createSupabaseClientBrowser();
 
   useEffect(() => {
@@ -52,7 +134,58 @@ export default function ProdutosPage() {
 
         if (fetchError) throw fetchError;
 
-        setProdutos(data || []);
+        const produtosCom = (data || []) as ProdutoComAtributos[];
+
+        // Extrair atributos e agrupar
+        const produtosComAtributos = produtosCom.map(prod => {
+          const { nomeBase, atributos } = extrairAtributos(prod.nome);
+          return {
+            ...prod,
+            atributos,
+            ehVariacao: prod.nome !== nomeBase,
+          };
+        });
+
+        // Extrair cores e tamanhos únicos
+        const coresUnicas = Array.from(new Set(
+          produtosComAtributos
+            .filter(p => p.atributos.cor)
+            .map(p => p.atributos.cor!)
+        )).sort();
+
+        const tamanhoUnicos = Array.from(new Set(
+          produtosComAtributos
+            .filter(p => p.atributos.tamanho)
+            .map(p => p.atributos.tamanho!)
+        )).sort();
+
+        setCores(coresUnicas);
+        setTamanhos(tamanhoUnicos);
+
+        // Aplicar filtros de atributos
+        let produtosFiltrados = produtosComAtributos;
+
+        if (corFilter) {
+          produtosFiltrados = produtosFiltrados.filter(
+            p => !p.ehVariacao || p.atributos.cor === corFilter
+          );
+        }
+
+        if (tamanhoFilter) {
+          produtosFiltrados = produtosFiltrados.filter(
+            p => !p.ehVariacao || p.atributos.tamanho === tamanhoFilter
+          );
+        }
+
+        if (apenasComEstoque) {
+          produtosFiltrados = produtosFiltrados.filter(
+            p => p.saldo_fisico_total > 0
+          );
+        }
+
+        setProdutos(produtosFiltrados);
+        const gruposAgrupados = agruparProdutos(produtosFiltrados);
+        setGrupos(gruposAgrupados);
       } catch (err: any) {
         setError(err.message || 'Erro ao carregar produtos');
       } finally {
@@ -61,7 +194,13 @@ export default function ProdutosPage() {
     }
 
     fetchProdutos();
-  }, [search, situacaoFilter, supabase]);
+  }, [search, situacaoFilter, corFilter, tamanhoFilter, apenasComEstoque, supabase]);
+
+  function toggleGrupo(index: number) {
+    setGrupos(grupos.map((g, i) =>
+      i === index ? { ...g, expandido: !g.expandido } : g
+    ));
+  }
 
   async function handleSyncInicial() {
     try {
@@ -101,7 +240,7 @@ export default function ProdutosPage() {
         )}
 
         {/* Filtros */}
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
           <input
             type="text"
             placeholder="Buscar por nome ou código..."
@@ -132,6 +271,47 @@ export default function ProdutosPage() {
             <option value="Inativo">Inativo</option>
           </select>
 
+          <select
+            value={corFilter}
+            onChange={(e) => setCorFilter(e.target.value)}
+            style={{
+              padding: '8px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '14px'
+            }}
+          >
+            <option value="">Todas as cores</option>
+            {cores.map(cor => (
+              <option key={cor} value={cor}>{cor}</option>
+            ))}
+          </select>
+
+          <select
+            value={tamanhoFilter}
+            onChange={(e) => setTamanhoFilter(e.target.value)}
+            style={{
+              padding: '8px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '14px'
+            }}
+          >
+            <option value="">Todos os tamanhos</option>
+            {tamanhos.map(tam => (
+              <option key={tam} value={tam}>{tam}</option>
+            ))}
+          </select>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={apenasComEstoque}
+              onChange={(e) => setApenasComEstoque(e.target.checked)}
+            />
+            Apenas com estoque
+          </label>
+
           <button
             onClick={handleSyncInicial}
             disabled={loading}
@@ -156,7 +336,7 @@ export default function ProdutosPage() {
         <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>
           Carregando produtos...
         </div>
-      ) : produtos.length === 0 ? (
+      ) : grupos.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>
           Nenhum produto encontrado. Clique em "Sincronizar" para importar produtos do Bling.
         </div>
@@ -171,9 +351,11 @@ export default function ProdutosPage() {
             boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
           }}>
             <thead>
-              <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
-                <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Código</th>
-                <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Nome</th>
+              <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '2px solid #e5e7eb' }}>
+                <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', width: '40px' }}></th>
+                <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Produto</th>
+                <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Cor</th>
+                <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Tamanho</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Preço</th>
                 <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>Estoque</th>
                 <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>Situação</th>
@@ -181,55 +363,110 @@ export default function ProdutosPage() {
               </tr>
             </thead>
             <tbody>
-              {produtos.map((produto) => (
-                <tr
-                  key={produto.id}
-                  style={{
-                    borderBottom: '1px solid #e5e7eb',
-                  }}
-                >
-                  <td style={{ padding: '12px', fontSize: '14px', fontFamily: 'monospace' }}>
-                    {produto.codigo}
-                  </td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>
-                    {produto.nome}
-                  </td>
-                  <td style={{ padding: '12px', textAlign: 'right', fontSize: '14px' }}>
-                    R$ {produto.preco?.toFixed(2) || '0.00'}
-                  </td>
-                  <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px' }}>
-                    <span style={{
-                      padding: '4px 8px',
-                      backgroundColor: produto.saldo_fisico_total > 0 ? '#d1fae5' : '#fee',
-                      color: produto.saldo_fisico_total > 0 ? '#065f46' : '#c00',
-                      borderRadius: '4px',
-                      fontSize: '12px'
-                    }}>
-                      {produto.saldo_fisico_total}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px' }}>
-                    <span style={{
-                      padding: '4px 8px',
-                      backgroundColor: produto.situacao === 'Ativo' ? '#dbeafe' : '#e5e7eb',
-                      color: produto.situacao === 'Ativo' ? '#0c4a6e' : '#374151',
-                      borderRadius: '4px',
-                      fontSize: '12px'
-                    }}>
-                      {produto.situacao}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px', textAlign: 'center' }}>
-                    <Link href={`/produtos/${produto.id}`} style={{
-                      color: '#0066cc',
-                      textDecoration: 'none',
-                      fontSize: '14px',
-                      fontWeight: '500'
-                    }}>
-                      Ver
-                    </Link>
-                  </td>
-                </tr>
+              {grupos.map((grupo, grupoIdx) => (
+                <React.Fragment key={grupo.nomeBase}>
+                  {/* Linha do Produto Principal */}
+                  <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                    <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px', cursor: 'pointer' }} onClick={() => toggleGrupo(grupoIdx)}>
+                      {grupo.variacoes.length > 0 ? (
+                        <span style={{ fontSize: '16px' }}>{grupo.expandido ? '▼' : '▶'}</span>
+                      ) : null}
+                    </td>
+                    <td style={{ padding: '12px', fontSize: '14px', fontWeight: '600' }}>
+                      {grupo.nomeBase} {grupo.pai && `(${grupo.pai.codigo})`}
+                    </td>
+                    <td></td>
+                    <td></td>
+                    <td style={{ padding: '12px', textAlign: 'right', fontSize: '14px' }}>
+                      R$ {grupo.pai?.preco?.toFixed(2) || '—'}
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: '600' }}>
+                      <span style={{
+                        padding: '4px 8px',
+                        backgroundColor: grupo.estoqueTotal > 0 ? '#d1fae5' : '#fee',
+                        color: grupo.estoqueTotal > 0 ? '#065f46' : '#c00',
+                        borderRadius: '4px',
+                        fontSize: '12px'
+                      }}>
+                        {grupo.estoqueTotal}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px' }}>
+                      <span style={{
+                        padding: '4px 8px',
+                        backgroundColor: grupo.pai?.situacao === 'Ativo' ? '#dbeafe' : '#e5e7eb',
+                        color: grupo.pai?.situacao === 'Ativo' ? '#0c4a6e' : '#374151',
+                        borderRadius: '4px',
+                        fontSize: '12px'
+                      }}>
+                        {grupo.pai?.situacao || '—'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                      {grupo.pai && (
+                        <Link href={`/produtos/${grupo.pai.id}`} style={{
+                          color: '#0066cc',
+                          textDecoration: 'none',
+                          fontSize: '14px',
+                          fontWeight: '500'
+                        }}>
+                          Ver
+                        </Link>
+                      )}
+                    </td>
+                  </tr>
+
+                  {/* Variações */}
+                  {grupo.expandido && grupo.variacoes.map((variacao) => (
+                    <tr key={variacao.id} style={{ backgroundColor: '#ffffff', borderBottom: '1px solid #e5e7eb' }}>
+                      <td style={{ padding: '12px' }}></td>
+                      <td style={{ padding: '12px', fontSize: '13px', color: '#666' }}>
+                        ├─ Var. {variacao.codigo}
+                      </td>
+                      <td style={{ padding: '12px', fontSize: '13px' }}>
+                        {variacao.atributos.cor || '—'}
+                      </td>
+                      <td style={{ padding: '12px', fontSize: '13px' }}>
+                        {variacao.atributos.tamanho || '—'}
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'right', fontSize: '13px' }}>
+                        R$ {variacao.preco?.toFixed(2) || '0.00'}
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center', fontSize: '13px' }}>
+                        <span style={{
+                          padding: '3px 6px',
+                          backgroundColor: variacao.saldo_fisico_total > 0 ? '#d1fae5' : '#fee',
+                          color: variacao.saldo_fisico_total > 0 ? '#065f46' : '#c00',
+                          borderRadius: '4px',
+                          fontSize: '11px'
+                        }}>
+                          {variacao.saldo_fisico_total}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center', fontSize: '13px' }}>
+                        <span style={{
+                          padding: '3px 6px',
+                          backgroundColor: variacao.situacao === 'Ativo' ? '#dbeafe' : '#e5e7eb',
+                          color: variacao.situacao === 'Ativo' ? '#0c4a6e' : '#374151',
+                          borderRadius: '4px',
+                          fontSize: '11px'
+                        }}>
+                          {variacao.situacao}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                        <Link href={`/produtos/${variacao.id}`} style={{
+                          color: '#0066cc',
+                          textDecoration: 'none',
+                          fontSize: '13px',
+                          fontWeight: '500'
+                        }}>
+                          Ver
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
