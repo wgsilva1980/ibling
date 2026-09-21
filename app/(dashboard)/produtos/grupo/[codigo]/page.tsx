@@ -177,7 +177,7 @@ export default function EditarGrupoPage() {
       setSuccess(false);
 
       // Atualizar/criar cada produto
-      const todasAsAtualizacoes = produtosComMudancas.map(p => {
+      const todasAsAtualizacoes = produtosComMudancas.map(async (p) => {
         let nome = p.nomeBase;
         if (p.cor || p.tamanho) {
           const atributos = [];
@@ -188,7 +188,7 @@ export default function EditarGrupoPage() {
 
         // Se é novo (id = 0), enviar como nova criação
         if (p.id === 0) {
-          return fetch(`/api/bling/produtos/criar`, {
+          const res = await fetch(`/api/bling/produtos/criar`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -199,10 +199,11 @@ export default function EditarGrupoPage() {
               produtoPaiId,
             }),
           });
+          return { ok: res.ok, status: res.status, data: await res.json() };
         }
 
         // Caso contrário, atualizar existente
-        return fetch(`/api/bling/produtos/${p.id}`, {
+        const res = await fetch(`/api/bling/produtos/${p.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -211,13 +212,21 @@ export default function EditarGrupoPage() {
             situacao: p.situacao,
           }),
         });
+        return { ok: res.ok, status: res.status, data: await res.json() };
       });
 
       const resultados = await Promise.all(todasAsAtualizacoes);
       const todosOk = resultados.every(r => r.ok);
 
       if (!todosOk) {
-        throw new Error('Erro ao salvar alguns produtos');
+        const erros: string[] = [];
+        for (let i = 0; i < resultados.length; i++) {
+          if (!resultados[i].ok) {
+            const erro = resultados[i].data?.error || 'Erro desconhecido';
+            erros.push(`Produto ${i + 1}: ${erro}`);
+          }
+        }
+        throw new Error(`Erro ao salvar produtos: ${erros.join('; ')}`);
       }
 
       setSuccess(true);

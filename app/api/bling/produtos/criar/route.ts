@@ -28,12 +28,23 @@ export async function POST(req: NextRequest) {
     let produtoMae: any = null;
 
     if (produtoPaiId) {
+      // Garantir que produtoPaiId é um número
+      const idPai = typeof produtoPaiId === 'string' ? parseInt(produtoPaiId, 10) : produtoPaiId;
+
+      if (isNaN(idPai)) {
+        throw new Error(`produtoPaiId inválido: ${produtoPaiId}`);
+      }
+
+      console.log(`Buscando produto pai com ID: ${idPai}`);
+
       // Buscar dados do produto pai para usar o mesmo formato
       try {
-        const response = await blingRequest(`/produtos/${produtoPaiId}`);
+        const response = await blingRequest(`/produtos/${idPai}`);
         produtoMae = response.data;
-      } catch (err) {
-        console.error('Erro ao buscar produto pai:', err);
+        console.log(`Produto pai encontrado:`, JSON.stringify(produtoMae, null, 2));
+      } catch (err: any) {
+        console.error(`Erro ao buscar produto pai ${idPai}:`, err);
+        // Continuar mesmo se não conseguir buscar, pois pode ser timeout
       }
       isVariacao = true;
     }
