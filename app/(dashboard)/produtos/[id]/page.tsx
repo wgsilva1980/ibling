@@ -168,6 +168,22 @@ export default function ProdutoDetalhePage() {
             >
               Ver Logs
             </Link>
+            <Link
+              href={`/produtos/${produtoId}/fotos`}
+              style={{
+                padding: '10px 16px',
+                backgroundColor: '#ec4899',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                textDecoration: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              📸 Fotos
+            </Link>
           </div>
         </div>
 
