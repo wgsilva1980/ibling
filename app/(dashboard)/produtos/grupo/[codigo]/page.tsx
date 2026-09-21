@@ -92,17 +92,19 @@ export default function EditarGrupoPage() {
 
         if (erroGrupo) throw erroGrupo;
 
-        // Extrair atributos de cada produto
-        const produtosComAtributos: ProdutoEditavel[] = (grupoData || []).map(p => {
-          const { cor, tamanho, nomeBase: nb } = extrairAtributos(p.nome);
-          return {
-            ...p,
-            cor,
-            tamanho,
-            nomeBase: nb,
-            editando: false,
-          };
-        });
+        // Extrair atributos de cada produto (excluindo o produto pai)
+        const produtosComAtributos: ProdutoEditavel[] = (grupoData || [])
+          .filter(p => p.id !== produtoPrincipal.id)
+          .map(p => {
+            const { cor, tamanho, nomeBase: nb } = extrairAtributos(p.nome);
+            return {
+              ...p,
+              cor,
+              tamanho,
+              nomeBase: nb,
+              editando: false,
+            };
+          });
 
         // Extrair cores e tamanhos únicos
         const coresUnicas = Array.from(new Set(
