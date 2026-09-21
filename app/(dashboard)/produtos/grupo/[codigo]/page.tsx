@@ -159,12 +159,27 @@ export default function EditarGrupoPage() {
       return;
     }
 
+    // Validar novas variações
+    const novasVariacoes = produtosComMudancas.filter(p => p.id === 0);
+    for (const variacao of novasVariacoes) {
+      if (!variacao.codigo.trim()) {
+        setError('Novas variações precisam de um código (SKU)');
+        setSaving(false);
+        return;
+      }
+      if (!variacao.cor && !variacao.tamanho) {
+        setError('Novas variações precisam de Cor ou Tamanho');
+        setSaving(false);
+        return;
+      }
+    }
+
     try {
       setSaving(true);
       setError(null);
       setSuccess(false);
 
-      // Atualizar cada produto
+      // Atualizar/criar cada produto
       const todasAsAtualizacoes = produtosComMudancas.map(p => {
         let nome = p.nomeBase;
         if (p.cor || p.tamanho) {
@@ -174,6 +189,21 @@ export default function EditarGrupoPage() {
           nome = `${p.nomeBase} ${atributos.join(';')}`;
         }
 
+        // Se é novo (id = 0), enviar como nova criação
+        if (p.id === 0) {
+          return fetch(`/api/bling/produtos/criar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              codigo: p.codigo,
+              nome,
+              preco: p.preco,
+              situacao: p.situacao,
+            }),
+          });
+        }
+
+        // Caso contrário, atualizar existente
         return fetch(`/api/bling/produtos/${p.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -265,7 +295,7 @@ export default function EditarGrupoPage() {
         }}>
           <thead>
             <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '2px solid #e5e7eb' }}>
-              <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Código</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', minWidth: '80px' }}>Código</th>
               <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Cor</th>
               <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Tamanho</th>
               <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Preço (R$)</th>
@@ -282,8 +312,27 @@ export default function EditarGrupoPage() {
                   borderBottom: '1px solid #e5e7eb',
                 }}
               >
-                <td style={{ padding: '12px', fontSize: '14px', fontFamily: 'monospace' }}>
-                  {produto.codigo}
+                <td style={{ padding: '8px' }}>
+                  {produto.id === 0 ? (
+                    <input
+                      type="text"
+                      value={produto.codigo}
+                      onChange={(e) => handleChange(idx, 'codigo', e.target.value)}
+                      disabled={saving}
+                      placeholder="Ex: SKU-001"
+                      style={{
+                        width: '100%',
+                        padding: '6px 8px',
+                        border: '1px solid #f97316',
+                        borderRadius: '4px',
+                        fontSize: '13px',
+                        boxSizing: 'border-box',
+                        backgroundColor: '#fff7ed',
+                      }}
+                    />
+                  ) : (
+                    <span style={{ fontSize: '14px', fontFamily: 'monospace' }}>{produto.codigo}</span>
+                  )}
                 </td>
                 <td style={{ padding: '8px' }}>
                   <input
