@@ -37,11 +37,18 @@ function extrairAtributos(nome: string): { nomeBase: string; atributos: Atributo
   const atributos: Atributos = {};
   let nomeBase = nome;
 
+  // Encontrar o índice do primeiro atributo (COR:, Cor:, TAM:, Tam:, etc)
+  const primeiroAtributo = nome.search(/(?:COR:|Cor:|TAM:|Tam:)/i);
+
+  if (primeiroAtributo !== -1) {
+    // Tudo antes do primeiro atributo é o nome base
+    nomeBase = nome.substring(0, primeiroAtributo).trim();
+  }
+
   // Extrair COR
   const matchCor = nome.match(/(?:COR:|Cor:)\s*([^;]+)/i);
   if (matchCor) {
     atributos.cor = matchCor[1].trim();
-    nomeBase = nome.split(/(?:COR:|Cor:)/i)[0].trim();
   }
 
   // Extrair TAM
