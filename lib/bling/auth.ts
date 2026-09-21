@@ -1,6 +1,6 @@
 import { createSupabaseClient } from '@/lib/supabase/server';
 
-const BLING_TOKEN_URL = 'https://www.bling.com.br/Api/v3/oauth/token';
+const BLING_TOKEN_URL = 'https://api.bling.com.br/Api/v3/oauth/token';
 
 interface BlingTokenResponse {
   access_token: string;

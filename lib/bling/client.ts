@@ -1,6 +1,6 @@
 import { getValidAccessToken } from './auth';
 
-const BASE_URL = 'https://www.bling.com.br/Api/v3';
+const BASE_URL = 'https://api.bling.com.br/Api/v3';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
