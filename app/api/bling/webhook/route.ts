@@ -7,8 +7,11 @@ export async function POST(req: NextRequest) {
 
   try {
     const payload = await req.json();
-    const evento = payload.evento as string;
-    const dados = payload.dados;
+    console.log('Webhook payload completo:', JSON.stringify(payload, null, 2));
+
+    // Bling pode enviar em diferentes formatos
+    const evento = (payload.evento || payload.type || payload.event) as string;
+    const dados = payload.dados || payload.data || payload;
 
     console.log(`Webhook recebido: ${evento}`);
 
