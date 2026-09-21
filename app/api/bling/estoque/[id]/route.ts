@@ -31,23 +31,41 @@ export async function PUT(
     // Atualizar cada depósito no Bling
     for (const dep of depositos) {
       try {
-        await blingRequest('/estoques', {
-          method: 'POST',
-          body: JSON.stringify({
-            produto: {
-              id: produtoId,
-            },
-            deposito: {
-              id: dep.depositoId,
-            },
-            saldoFisico: parseInt(dep.saldoFisico.toString()),
-            saldoVirtual: parseInt(dep.saldoVirtual.toString()),
-          }),
-        });
+        // Buscar saldo atual no banco
+        const { data: saldoAtual } = await supabase
+          .from('bling_estoque_depositos')
+          .select('saldo_fisico')
+          .eq('produto_id', produtoId)
+          .eq('deposito_id', dep.depositoId)
+          .single();
+
+        const saldoAtualFisico = saldoAtual?.saldo_fisico || 0;
+        const novoSaldoFisico = parseInt(dep.saldoFisico.toString());
+        const diferenca = novoSaldoFisico - saldoAtualFisico;
+
+        // Se há diferença, registrar como movimentação
+        if (diferenca !== 0) {
+          const tipoOperacao = diferenca > 0 ? 'E' : 'S'; // E = Entrada, S = Saída
+          const quantidade = Math.abs(diferenca);
+
+          await blingRequest('/estoques', {
+            method: 'POST',
+            body: JSON.stringify({
+              produto: {
+                id: produtoId,
+              },
+              deposito: {
+                id: dep.depositoId,
+              },
+              tipoOperacao,
+              quantidade,
+            }),
+          });
+        }
 
         // Atualizar no Supabase
         await supabase.from('bling_estoque_depositos').update({
-          saldo_fisico: parseInt(dep.saldoFisico.toString()),
+          saldo_fisico: novoSaldoFisico,
           saldo_virtual: parseInt(dep.saldoVirtual.toString()),
           atualizado_em: new Date().toISOString(),
         }).eq('produto_id', produtoId).eq('deposito_id', dep.depositoId);
