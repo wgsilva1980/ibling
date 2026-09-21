@@ -139,7 +139,10 @@ export async function POST(req: NextRequest) {
             console.log(`Produto pai com variações vinculadas:`, JSON.stringify(variacaoResponse.data, null, 2));
           }
         } catch (err: any) {
-          console.error(`Erro ao gerar combinações de variações:`, err.message);
+          console.error(`Erro ao vincular variações ao produto pai ${idPai}:`);
+          console.error(`Mensagem:`, err.message);
+          console.error(`Stack:`, err.stack);
+          console.error(`Erro completo:`, JSON.stringify(err, null, 2));
           // Continuar mesmo se falhar, pois a variação foi criada
         }
       }
