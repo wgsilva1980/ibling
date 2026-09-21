@@ -509,7 +509,7 @@ export default function ProdutosPage() {
                           {variacao.situacao}
                         </span>
                       </td>
-                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                      <td style={{ padding: '12px', textAlign: 'center', display: 'flex', gap: '6px', justifyContent: 'center' }}>
                         <Link href={`/produtos/${variacao.id}`} style={{
                           color: '#0066cc',
                           textDecoration: 'none',
@@ -518,6 +518,21 @@ export default function ProdutosPage() {
                         }}>
                           Ver
                         </Link>
+                        <span style={{ color: '#d1d5db' }}>•</span>
+                        <button
+                          onClick={() => handleDeletar(variacao.id)}
+                          style={{
+                            color: '#dc2626',
+                            background: 'none',
+                            border: 'none',
+                            fontSize: '13px',
+                            fontWeight: '500',
+                            cursor: 'pointer',
+                            padding: 0,
+                          }}
+                        >
+                          Deletar
+                        </button>
                       </td>
                     </tr>
                   ))}
