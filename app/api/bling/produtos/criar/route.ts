@@ -45,8 +45,9 @@ export async function POST(req: NextRequest) {
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     const codigo = `VAR-${timestamp}-${random}`;
 
-    console.log(`Criando novo produto no Bling: ${codigo} - ${nome}`);
-    console.log(`produtoPaiId recebido: ${produtoPaiId} (tipo: ${typeof produtoPaiId})`);
+    console.log(`[CRIAR_VARIACAO] Iniciando fluxo de criação`);
+    console.log(`[CRIAR_VARIACAO] Produto: ${codigo} - ${nome}`);
+    console.log(`[CRIAR_VARIACAO] produtoPaiId recebido: ${produtoPaiId} (tipo: ${typeof produtoPaiId})`);
 
     // Passo 1: Criar a variação como produto simples
     const corpo: any = {
