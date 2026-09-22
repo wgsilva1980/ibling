@@ -78,10 +78,11 @@ export async function POST(req: NextRequest) {
     const novoId = produtoData.id;
     console.log(`✅ Produto criado com sucesso no Bling: ${novoId}`);
 
-    // Passo 2: Se tem produto pai, vincular a nova variação usando o endpoint de gerar combinações
-    console.log(`Verificando se tem produtoPaiId: ${produtoPaiId ? 'SIM' : 'NÃO'}`);
+    // Passo 2: Vincular seria feito aqui, mas desabilitado temporariamente para evitar erros
+    // TODO: Debug do endpoint de gerar-combinacoes
+    console.log(`ℹ️ produtoPaiId recebido: ${produtoPaiId}`);
 
-    if (produtoPaiId) {
+    if (false && produtoPaiId) {
       const idPai = typeof produtoPaiId === 'string' ? parseInt(produtoPaiId, 10) : produtoPaiId;
       console.log(`idPai parseado: ${idPai} (isNaN: ${isNaN(idPai)})`);
 
