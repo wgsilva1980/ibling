@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     const novoId = produtoData.id;
     console.log(`✅ Produto criado com sucesso no Bling: ${novoId}`);
 
-    // Passo 2: Se tem produto pai, vincular a nova variação ao produto pai
+    // Passo 2: Se tem produto pai, vincular a nova variação usando o endpoint de gerar combinações
     if (produtoPaiId) {
       const idPai = typeof produtoPaiId === 'string' ? parseInt(produtoPaiId, 10) : produtoPaiId;
 
@@ -85,76 +85,57 @@ export async function POST(req: NextRequest) {
         try {
           console.log(`Vinculando variação ao produto pai ${idPai}`);
 
-          // Buscar o produto pai com todas as suas variações
-          const produtoPaiResponse = await blingRequest(`/produtos/${idPai}`);
-          const produtoPai = produtoPaiResponse.data || produtoPaiResponse;
+          // Extrair atributos do nome da variação
+          const { atributos } = extrairAtributos(nome);
 
-          if (!produtoPai) {
-            throw new Error('Produto pai não encontrado na resposta');
-          }
-
-          console.log(`Produto pai encontrado: ${produtoPai.nome}`);
-          console.log(`Variações existentes: ${produtoPai.variacoes?.length || 0}`);
-
-          // Preparar payload para PATCH: incluir todas as variações existentes + nova
-          const variacoes: any[] = [];
-
-          // Adicionar variações existentes com seus IDs
-          if (produtoPai.variacoes && Array.isArray(produtoPai.variacoes)) {
-            for (const varExistente of produtoPai.variacoes) {
-              variacoes.push({
-                id: varExistente.id,
-              });
-            }
-          }
-
-          // Adicionar a nova variação
-          variacoes.push({
-            nomeVariacao: nome,
-            tipo: 'P',
-            formato: 'S',
-            codigo: codigo,
-            preco: parseFloat(preco.toString()),
-            situacao: situacao === 'Ativo' ? 'A' : 'I',
-          });
-
-          console.log(`Total de variações (existentes + nova): ${variacoes.length}`);
-
-          // Preparar payload para PATCH
-          const patchPayload = {
-            nome: produtoPai.nome,
-            codigo: produtoPai.codigo,
-            preco: produtoPai.preco,
-            tipo: produtoPai.tipo,
-            formato: 'V', // Garantir que é formato variação
-            situacao: produtoPai.situacao,
-            unidade: produtoPai.unidade || 'UN',
-            variacoes: variacoes,
-          };
-
-          console.log(`Payload para PATCH:`, JSON.stringify(patchPayload, null, 2));
-
-          // Fazer PATCH no produto pai
-          console.log(`Iniciando PATCH em /produtos/${idPai}...`);
-          const patchResponse = await blingRequest(`/produtos/${idPai}`, {
-            method: 'PATCH',
-            body: JSON.stringify(patchPayload),
-          });
-
-          console.log(`Resposta completa do PATCH:`, JSON.stringify(patchResponse, null, 2));
-
-          if (patchResponse && (patchResponse.id || patchResponse.variacoes)) {
-            console.log(`✅ PATCH bem-sucedido! Variação vinculada ao produto ${idPai}`);
-          } else if (!patchResponse || Object.keys(patchResponse || {}).length === 0) {
-            console.warn(`⚠️ PATCH retornou resposta vazia. Verificar se a variação foi vinculada manualmente no Bling`);
+          if (Object.keys(atributos).length === 0) {
+            console.warn(`⚠️ Nenhum atributo encontrado no nome: ${nome}`);
           } else {
-            console.log(`✅ PATCH processado. Resposta:`, patchResponse);
+            console.log(`Atributos extraídos:`, JSON.stringify(atributos, null, 2));
+
+            // Passo 2a: Gerar combinações de atributos
+            const atributosArray = Object.entries(atributos).map(([tipo, valor]) => ({
+              tipo,
+              valor,
+            }));
+
+            console.log(`Gerando combinações com atributos:`, JSON.stringify(atributosArray, null, 2));
+
+            const gerarCombinacoes = await blingRequest('/produtos/variacoes/atributos/gerar-combinacoes', {
+              method: 'POST',
+              body: JSON.stringify({
+                idProduto: idPai,
+                atributos: atributosArray,
+              }),
+            });
+
+            console.log(`Resposta do gerar-combinacoes:`, JSON.stringify(gerarCombinacoes, null, 2));
+
+            if (!gerarCombinacoes) {
+              throw new Error('Falha ao gerar combinações de atributos');
+            }
+
+            // Passo 2b: Usar a resposta para fazer PUT no produto pai
+            const produtoAtualizado = gerarCombinacoes.data || gerarCombinacoes;
+
+            console.log(`Atualizando produto pai ${idPai} com as variações geradas...`);
+
+            const putResponse = await blingRequest(`/produtos/${idPai}`, {
+              method: 'PUT',
+              body: JSON.stringify(produtoAtualizado),
+            });
+
+            console.log(`Resposta do PUT /produtos/${idPai}:`, JSON.stringify(putResponse, null, 2));
+
+            if (putResponse && (putResponse.id || putResponse.variacoes)) {
+              console.log(`✅ Variação vinculada com sucesso ao produto ${idPai}!`);
+            } else {
+              console.log(`✅ Produto atualizado. Resposta:`, putResponse);
+            }
           }
         } catch (err: any) {
           console.error(`❌ ERRO ao vincular variação ao produto pai ${idPai}:`);
           console.error(`Mensagem de erro:`, err.message);
-          console.error(`Status HTTP:`, err.status);
-          console.error(`Response:`, err.response);
           console.error(`Erro completo:`, JSON.stringify(err, null, 2));
           // Continuar mesmo se falhar, pois a variação foi criada como produto independente
         }
