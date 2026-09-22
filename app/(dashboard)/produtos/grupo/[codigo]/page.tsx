@@ -156,6 +156,10 @@ export default function EditarGrupoPage() {
   }
 
   async function handleSalvar() {
+    console.log(`[FRONTEND] handleSalvar iniciado`);
+    console.log(`[FRONTEND] produtoPaiId atual: ${produtoPaiId}`);
+    console.log(`[FRONTEND] produtoPaiId tipo: ${typeof produtoPaiId}`);
+
     const produtosComMudancas = produtos.filter(p => p.editando);
 
     if (produtosComMudancas.length === 0) {
