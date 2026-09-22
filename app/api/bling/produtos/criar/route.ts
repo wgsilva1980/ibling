@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     const codigo = `VAR-${timestamp}-${random}`;
 
     console.log(`Criando novo produto no Bling: ${codigo} - ${nome}`);
-    console.log(`produtoPaiId recebido: ${produtoPaiId}`);
+    console.log(`produtoPaiId recebido: ${produtoPaiId} (tipo: ${typeof produtoPaiId})`);
 
     // Passo 1: Criar a variação como produto simples
     const corpo: any = {
@@ -78,12 +78,15 @@ export async function POST(req: NextRequest) {
     console.log(`✅ Produto criado com sucesso no Bling: ${novoId}`);
 
     // Passo 2: Se tem produto pai, vincular a nova variação usando o endpoint de gerar combinações
+    console.log(`Verificando se tem produtoPaiId: ${produtoPaiId ? 'SIM' : 'NÃO'}`);
+
     if (produtoPaiId) {
       const idPai = typeof produtoPaiId === 'string' ? parseInt(produtoPaiId, 10) : produtoPaiId;
+      console.log(`idPai parseado: ${idPai} (isNaN: ${isNaN(idPai)})`);
 
       if (!isNaN(idPai)) {
         try {
-          console.log(`Vinculando variação ao produto pai ${idPai}`);
+          console.log(`✅ Iniciando vinculação de variação ao produto pai ${idPai}`);
 
           // Extrair atributos do nome da variação
           const { atributos } = extrairAtributos(nome);
