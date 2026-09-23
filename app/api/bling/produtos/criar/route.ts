@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     // TODO: Debug do endpoint de gerar-combinacoes
     console.log(`ℹ️ produtoPaiId recebido: ${produtoPaiId}`);
 
-    if (false && produtoPaiId) {
+    if (produtoPaiId) {
       const idPai = typeof produtoPaiId === 'string' ? parseInt(produtoPaiId, 10) : produtoPaiId;
       console.log(`idPai parseado: ${idPai} (isNaN: ${isNaN(idPai)})`);
 
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
             const gerarCombinacoes = await blingRequest('/produtos/variacoes/atributos/gerar-combinacoes', {
               method: 'POST',
               body: JSON.stringify({
-                idProduto: idPai,
+                idProdutoPai: idPai,
                 atributos: atributosArray,
               }),
             });
