@@ -120,6 +120,31 @@ export async function POST(req: NextRequest) {
               throw new Error('Falha ao gerar combinações de atributos');
             }
 
+            // Passo 2b: Fazer PUT no produto pai com a variação recém-criada
+            const variacao = {
+              id: novoId,
+              nome,
+              preco: parseFloat(preco.toString()),
+              tipo: 'P',
+              formato: 'S',
+              situacao: situacao === 'Ativo' ? 'A' : 'I',
+              variacao: {
+                nome: `${Object.entries(atributos).map(([k, v]) => `${k}:${v}`).join(';')}`,
+                produtoPai: { id: idPai }
+              }
+            };
+
+            console.log(`Fazendo PUT no produto pai ${idPai} com a variação:`, JSON.stringify(variacao, null, 2));
+
+            const putResponse = await blingRequest(`/produtos/${idPai}`, {
+              method: 'PUT',
+              body: JSON.stringify({
+                ...gerarCombinacoes.data,
+                variacoes: [variacao]
+              }),
+            });
+
+            console.log(`Resposta do PUT:`, JSON.stringify(putResponse, null, 2));
             console.log(`✅ Variação vinculada com sucesso ao produto ${idPai}!`)
           }
         } catch (err: any) {
