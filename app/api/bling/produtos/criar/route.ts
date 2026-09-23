@@ -121,26 +121,33 @@ export async function POST(req: NextRequest) {
             }
 
             // Passo 2b: Fazer PUT no produto pai com a variação recém-criada
+            const atributosDescricao = Object.entries(atributos).map(([k, v]) => `${k}:${v}`).join(';');
+
             const variacao = {
               id: novoId,
-              nome,
+              nome: `${gerarCombinacoes.data.nome} ${atributosDescricao}`,
+              codigo: codigo,
               preco: parseFloat(preco.toString()),
               tipo: 'P',
               formato: 'S',
               situacao: situacao === 'Ativo' ? 'A' : 'I',
               variacao: {
-                nome: `${Object.entries(atributos).map(([k, v]) => `${k}:${v}`).join(';')}`,
+                nome: atributosDescricao,
                 produtoPai: { id: idPai }
               }
             };
 
             console.log(`Fazendo PUT no produto pai ${idPai} com a variação:`, JSON.stringify(variacao, null, 2));
 
+            const produtoAtualizado = gerarCombinacoes.data;
+            const variacoes = (produtoAtualizado.variacoes || []).filter((v: any) => v.id !== 0);
+            variacoes.push(variacao);
+
             const putResponse = await blingRequest(`/produtos/${idPai}`, {
               method: 'PUT',
               body: JSON.stringify({
-                ...gerarCombinacoes.data,
-                variacoes: [variacao]
+                ...produtoAtualizado,
+                variacoes
               }),
             });
 
