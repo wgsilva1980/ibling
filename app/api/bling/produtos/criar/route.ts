@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
             // Passo 2a: Gerar combinações de atributos
             const atributosArray = Object.entries(atributos).map(([tipo, valor]) => ({
               tipo,
-              valor,
+              opcoes: [{ valor }],
             }));
 
             console.log(`Gerando combinações com atributos:`, JSON.stringify(atributosArray, null, 2));
@@ -120,23 +120,39 @@ export async function POST(req: NextRequest) {
               throw new Error('Falha ao gerar combinações de atributos');
             }
 
-            // Passo 2b: Usar a resposta para fazer PUT no produto pai
-            const produtoAtualizado = gerarCombinacoes.data || gerarCombinacoes;
+            // Passo 2b: Fazer PUT no produto pai com a variação recém-criada
+            const atributosDescricao = Object.entries(atributos).map(([k, v]) => `${k}:${v}`).join(';');
 
-            console.log(`Atualizando produto pai ${idPai} com as variações geradas...`);
+            const variacao = {
+              id: novoId,
+              nome: `${gerarCombinacoes.data.nome} ${atributosDescricao}`,
+              codigo: codigo,
+              preco: parseFloat(preco.toString()),
+              tipo: 'P',
+              formato: 'S',
+              situacao: situacao === 'Ativo' ? 'A' : 'I',
+              variacao: {
+                nome: atributosDescricao,
+                produtoPai: { id: idPai }
+              }
+            };
+
+            console.log(`Fazendo PUT no produto pai ${idPai} com a variação:`, JSON.stringify(variacao, null, 2));
+
+            const produtoAtualizado = gerarCombinacoes.data;
+            const variacoes = (produtoAtualizado.variacoes || []).filter((v: any) => v.id !== 0);
+            variacoes.push(variacao);
 
             const putResponse = await blingRequest(`/produtos/${idPai}`, {
               method: 'PUT',
-              body: JSON.stringify(produtoAtualizado),
+              body: JSON.stringify({
+                ...produtoAtualizado,
+                variacoes
+              }),
             });
 
-            console.log(`Resposta do PUT /produtos/${idPai}:`, JSON.stringify(putResponse, null, 2));
-
-            if (putResponse && (putResponse.id || putResponse.variacoes)) {
-              console.log(`✅ Variação vinculada com sucesso ao produto ${idPai}!`);
-            } else {
-              console.log(`✅ Produto atualizado. Resposta:`, putResponse);
-            }
+            console.log(`Resposta do PUT:`, JSON.stringify(putResponse, null, 2));
+            console.log(`✅ Variação vinculada com sucesso ao produto ${idPai}!`)
           }
         } catch (err: any) {
           console.error(`❌ ERRO ao vincular variação ao produto pai ${idPai}:`);
