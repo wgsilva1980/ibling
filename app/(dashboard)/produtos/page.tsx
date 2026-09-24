@@ -12,6 +12,7 @@ interface Produto {
   preco: number;
   situacao: string;
   saldo_fisico_total: number;
+  raw?: any;
 }
 
 interface Atributos {
@@ -32,33 +33,54 @@ interface GrupoProduto {
   expandido: boolean;
 }
 
-// Extrair nome base e atributos do nome do produto
-function extrairAtributos(nome: string): { nomeBase: string; atributos: Atributos } {
+// Extrair atributos (COR/TAM) de um texto usando o padrão COR:x;TAM:y
+function extrairAtributosDeTexto(texto: string): Atributos {
   const atributos: Atributos = {};
-  let nomeBase = nome;
-
-  // Encontrar o índice do primeiro atributo (COR:, TAM:, TAMANHO:, etc)
-  // Suporta: COR:, Cor:, COR,: (com vírgula), TAM:, Tam:, TAMANHO:, Tamanho:
-  const primeiroAtributo = nome.search(/(?:COR[,:]{1,2}|Cor[,:]{1,2}|TAM[,:]{1,2}|Tam[,:]{1,2}|TAMANHO[,:]{1,2}|Tamanho[,:]{1,2})/i);
-
-  if (primeiroAtributo !== -1) {
-    // Tudo antes do primeiro atributo é o nome base
-    nomeBase = nome.substring(0, primeiroAtributo).trim();
-  }
 
   // Extrair COR (suporta COR: e COR,: com vírgula)
-  const matchCor = nome.match(/(?:COR[,:]{1,2}|Cor[,:]{1,2})\s*([^;]+)/i);
+  const matchCor = texto.match(/(?:COR[,:]{1,2}|Cor[,:]{1,2})\s*([^;]+)/i);
   if (matchCor) {
     atributos.cor = matchCor[1].trim();
   }
 
   // Extrair TAM ou TAMANHO
-  const matchTam = nome.match(/(?:TAM[,:]{1,2}|Tam[,:]{1,2}|TAMANHO[,:]{1,2}|Tamanho[,:]{1,2})\s*([^;]+)/i);
+  const matchTam = texto.match(/(?:TAM[,:]{1,2}|Tam[,:]{1,2}|TAMANHO[,:]{1,2}|Tamanho[,:]{1,2})\s*([^;]+)/i);
   if (matchTam) {
     atributos.tamanho = matchTam[1].trim();
   }
 
-  return { nomeBase, atributos };
+  return atributos;
+}
+
+// Extrair nome base e atributos do nome do produto
+// Suporta dois formatos:
+// 1. Produtos criados pela própria app: atributos embutidos no nome ("NOME COR:x;TAM:y")
+// 2. Produtos sincronizados direto do Bling: nome idêntico ao pai, atributos em raw.variacao.nome
+function extrairAtributos(nome: string, raw?: any): { nomeBase: string; atributos: Atributos; ehVariacao: boolean } {
+  const padraoAtributo = /(?:COR[,:]{1,2}|Cor[,:]{1,2}|TAM[,:]{1,2}|Tam[,:]{1,2}|TAMANHO[,:]{1,2}|Tamanho[,:]{1,2})/i;
+
+  // Caso 2: variação do Bling com atributos em campo aninhado
+  const nomeVariacao = raw?.variacao?.nome as string | undefined;
+  if (nomeVariacao && padraoAtributo.test(nomeVariacao)) {
+    return {
+      nomeBase: nome.trim(),
+      atributos: extrairAtributosDeTexto(nomeVariacao),
+      ehVariacao: true,
+    };
+  }
+
+  // Caso 1: atributos embutidos no próprio nome
+  const primeiroAtributo = nome.search(padraoAtributo);
+  if (primeiroAtributo !== -1) {
+    return {
+      nomeBase: nome.substring(0, primeiroAtributo).trim(),
+      atributos: extrairAtributosDeTexto(nome),
+      ehVariacao: true,
+    };
+  }
+
+  // Sem atributos: é o produto pai (ou produto simples sem variações)
+  return { nomeBase: nome.trim(), atributos: {}, ehVariacao: false };
 }
 
 // Agrupar produtos por nome base
@@ -66,8 +88,7 @@ function agruparProdutos(produtos: Produto[]): GrupoProduto[] {
   const grupos: Map<string, GrupoProduto> = new Map();
 
   produtos.forEach((prod) => {
-    const { nomeBase, atributos } = extrairAtributos(prod.nome);
-    const ehVariacao = prod.nome !== nomeBase;
+    const { nomeBase, atributos, ehVariacao } = extrairAtributos(prod.nome, prod.raw);
 
     if (!grupos.has(nomeBase)) {
       grupos.set(nomeBase, {
@@ -120,7 +141,7 @@ export default function ProdutosPage() {
 
         let query = supabase
           .from('bling_produtos')
-          .select('id, codigo, nome, preco, situacao, saldo_fisico_total')
+          .select('id, codigo, nome, preco, situacao, saldo_fisico_total, raw')
           .order('nome');
 
         // Aplicar filtros
@@ -147,11 +168,11 @@ export default function ProdutosPage() {
 
         // Extrair atributos e agrupar
         const produtosComAtributos = produtosCom.map(prod => {
-          const { nomeBase, atributos } = extrairAtributos(prod.nome);
+          const { atributos, ehVariacao } = extrairAtributos(prod.nome, prod.raw);
           return {
             ...prod,
             atributos,
-            ehVariacao: prod.nome !== nomeBase,
+            ehVariacao,
           };
         });
 

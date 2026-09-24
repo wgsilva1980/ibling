@@ -12,25 +12,37 @@ interface Produto {
   preco: number;
   situacao: string;
   saldo_fisico_total: number;
+  raw?: any;
 }
 
-function extrairAtributos(nome: string) {
+// Suporta dois formatos:
+// 1. Produtos criados pela própria app: atributos embutidos no nome ("NOME COR:x;TAM:y")
+// 2. Produtos sincronizados direto do Bling: nome idêntico ao pai, atributos em raw.variacao.nome
+function extrairAtributos(nome: string, raw?: any) {
+  const padraoAtributo = /(?:COR[,:]{1,2}|Cor[,:]{1,2}|TAM[,:]{1,2}|Tam[,:]{1,2}|TAMANHO[,:]{1,2}|Tamanho[,:]{1,2})/i;
+
+  const textoParaExtrairAtributos = (() => {
+    const nomeVariacao = raw?.variacao?.nome as string | undefined;
+    if (nomeVariacao && padraoAtributo.test(nomeVariacao)) return nomeVariacao;
+    return nome;
+  })();
+
   let nomeBase = nome;
   let cor = '';
   let tamanho = '';
 
-  const primeiroAtributo = nome.search(/(?:COR[,:]{1,2}|Cor[,:]{1,2}|TAM[,:]{1,2}|Tam[,:]{1,2}|TAMANHO[,:]{1,2}|Tamanho[,:]{1,2})/i);
-
+  // O nome base só é recortado a partir do próprio campo "nome" (não do nome aninhado da variação)
+  const primeiroAtributo = nome.search(padraoAtributo);
   if (primeiroAtributo !== -1) {
     nomeBase = nome.substring(0, primeiroAtributo).trim();
   }
 
-  const matchCor = nome.match(/(?:COR[,:]{1,2}|Cor[,:]{1,2})\s*([^;]+)/i);
+  const matchCor = textoParaExtrairAtributos.match(/(?:COR[,:]{1,2}|Cor[,:]{1,2})\s*([^;]+)/i);
   if (matchCor) {
     cor = matchCor[1].trim();
   }
 
-  const matchTam = nome.match(/(?:TAM[,:]{1,2}|Tam[,:]{1,2}|TAMANHO[,:]{1,2}|Tamanho[,:]{1,2})\s*([^;]+)/i);
+  const matchTam = textoParaExtrairAtributos.match(/(?:TAM[,:]{1,2}|Tam[,:]{1,2}|TAMANHO[,:]{1,2}|Tamanho[,:]{1,2})\s*([^;]+)/i);
   if (matchTam) {
     tamanho = matchTam[1].trim();
   }
@@ -79,19 +91,32 @@ export default function EditarGrupoPage() {
           throw new Error('Produto não encontrado');
         }
 
-        // Verificar se é uma variação; se for, redirecionar para o produto pai
-        const { nomeBase: baseEncontrado, cor, tamanho } = extrairAtributos(produtoEncontrado.nome);
+        // Verificar se é uma variação; se for, redirecionar para o produto pai.
+        // Variações sincronizadas do Bling trazem o ID do pai em raw.variacao.produtoPai.id
+        const idPaiDireto = produtoEncontrado.raw?.variacao?.produtoPai?.id as number | undefined;
+        const { nomeBase: baseEncontrado, cor, tamanho } = extrairAtributos(produtoEncontrado.nome, produtoEncontrado.raw);
 
-        // Se tem atributos (cor ou tamanho), é uma variação - encontrar o produto pai
         let produtoPrincipal = produtoEncontrado;
-        if (cor || tamanho) {
+        if (idPaiDireto) {
+          const { data: paiDireto } = await supabase
+            .from('bling_produtos')
+            .select('*')
+            .eq('id', idPaiDireto)
+            .single();
+
+          if (paiDireto) {
+            router.replace(`/produtos/grupo/${paiDireto.codigo}`);
+            return;
+          }
+        } else if (cor || tamanho) {
+          // Fallback para produtos criados pela própria app (atributos embutidos no nome)
           const { data: produtosPai } = await supabase
             .from('bling_produtos')
             .select('*')
             .ilike('nome', `${baseEncontrado}%`);
 
           const pai = (produtosPai || []).find(p => {
-            const { cor: c, tamanho: t } = extrairAtributos(p.nome);
+            const { cor: c, tamanho: t } = extrairAtributos(p.nome, p.raw);
             return !c && !t;
           });
 
@@ -102,11 +127,11 @@ export default function EditarGrupoPage() {
         }
 
         setProdutoPaiId(produtoPrincipal.id);
-        const { nomeBase: base } = extrairAtributos(produtoPrincipal.nome);
+        const { nomeBase: base } = extrairAtributos(produtoPrincipal.nome, produtoPrincipal.raw);
         setNomeBase(base);
 
-        // Buscar todos os produtos do grupo
-        const { data: grupoData, error: erroGrupo } = await supabase
+        // Buscar todos os produtos do grupo: por nome (fluxo antigo) OU por produtoPai.id (fluxo Bling)
+        const { data: grupoPorNome, error: erroGrupo } = await supabase
           .from('bling_produtos')
           .select('*')
           .ilike('nome', `${base}%`)
@@ -114,11 +139,24 @@ export default function EditarGrupoPage() {
 
         if (erroGrupo) throw erroGrupo;
 
+        const { data: todosComMesmoNome } = await supabase
+          .from('bling_produtos')
+          .select('*')
+          .eq('nome', produtoPrincipal.nome)
+          .order('codigo');
+
+        const grupoMap = new Map<number, any>();
+        (grupoPorNome || []).forEach(p => grupoMap.set(p.id, p));
+        (todosComMesmoNome || [])
+          .filter(p => p.raw?.variacao?.produtoPai?.id === produtoPrincipal.id)
+          .forEach(p => grupoMap.set(p.id, p));
+        const grupoData = Array.from(grupoMap.values());
+
         // Extrair atributos de cada produto (excluindo o produto pai)
         const produtosComAtributos: ProdutoEditavel[] = (grupoData || [])
           .filter(p => p.id !== produtoPrincipal.id)
           .map(p => {
-            const { cor, tamanho, nomeBase: nb } = extrairAtributos(p.nome);
+            const { cor, tamanho, nomeBase: nb } = extrairAtributos(p.nome, p.raw);
             return {
               ...p,
               cor,
