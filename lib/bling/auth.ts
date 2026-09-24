@@ -14,11 +14,11 @@ export async function getValidAccessToken(): Promise<string> {
   const supabase = createSupabaseClient();
 
   try {
-    // Buscar token atual do banco
+    // Buscar token válido - ordena por expiração (mais tarde primeiro)
     const { data: tokenRow, error: selectError } = await supabase
       .from('bling_tokens')
       .select('*')
-      .order('updated_at', { ascending: false })
+      .order('expires_at', { ascending: false })
       .limit(1)
       .single();
 
