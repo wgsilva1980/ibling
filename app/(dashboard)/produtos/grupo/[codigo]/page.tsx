@@ -69,14 +69,36 @@ export default function EditarGrupoPage() {
         setError(null);
 
         // Buscar o produto principal pelo código
-        const { data: produtoPrincipal, error: erroP } = await supabase
+        const { data: produtoEncontrado, error: erroP } = await supabase
           .from('bling_produtos')
           .select('*')
           .eq('codigo', codigo)
           .single();
 
-        if (erroP || !produtoPrincipal) {
+        if (erroP || !produtoEncontrado) {
           throw new Error('Produto não encontrado');
+        }
+
+        // Verificar se é uma variação; se for, redirecionar para o produto pai
+        const { nomeBase: baseEncontrado, cor, tamanho } = extrairAtributos(produtoEncontrado.nome);
+
+        // Se tem atributos (cor ou tamanho), é uma variação - encontrar o produto pai
+        let produtoPrincipal = produtoEncontrado;
+        if (cor || tamanho) {
+          const { data: produtosPai } = await supabase
+            .from('bling_produtos')
+            .select('*')
+            .ilike('nome', `${baseEncontrado}%`);
+
+          const pai = (produtosPai || []).find(p => {
+            const { cor: c, tamanho: t } = extrairAtributos(p.nome);
+            return !c && !t;
+          });
+
+          if (pai) {
+            router.replace(`/produtos/grupo/${pai.codigo}`);
+            return;
+          }
         }
 
         setProdutoPaiId(produtoPrincipal.id);
