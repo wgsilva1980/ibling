@@ -12,33 +12,30 @@ export async function POST(req: NextRequest) {
 
     console.log(`Webhook recebido: ${event}`);
 
-    // Produto atualizado
+    // Produto atualizado ou criado
     if (event === 'product.updated' || event === 'product.created') {
-      // Se o status é 'E' (excluído no Bling), deletar do sistema
-      if (data.situacao === 'E') {
-        console.log(`Produto ${data.id} excluído no Bling, deletando do sistema`);
-        await supabase.from('bling_produtos').delete().eq('id', data.id);
-      } else {
-        console.log(`Atualizando produto ${data.id}`);
-        await supabase.from('bling_produtos').upsert(
-          {
-            id: data.id,
-            codigo: data.codigo,
-            nome: data.nome,
-            preco: data.preco,
-            situacao: data.situacao === 'A' ? 'Ativo' : (data.situacao === 'I' ? 'Inativo' : data.situacao),
-            raw: data,
-            atualizado_em: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
-        );
-      }
+      console.log(`Atualizando produto ${data.id}`);
+      await supabase.from('bling_produtos').upsert(
+        {
+          id: data.id,
+          codigo: data.codigo,
+          nome: data.nome,
+          preco: data.preco,
+          situacao: data.situacao === 'A' ? 'Ativo' : (data.situacao === 'I' ? 'Inativo' : (data.situacao === 'E' ? 'Excluído' : data.situacao)),
+          raw: data,
+          atualizado_em: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      );
     }
 
-    // Produto deletado
+    // Produto deletado - apenas marcar como excluído, não deletar
     if (event === 'product.deleted') {
-      console.log(`Deletando produto ${data.id}`);
-      await supabase.from('bling_produtos').delete().eq('id', data.id);
+      console.log(`Marcando produto ${data.id} como excluído`);
+      await supabase.from('bling_produtos').update({
+        situacao: 'Excluído',
+        atualizado_em: new Date().toISOString(),
+      }).eq('id', data.id);
     }
 
     // Estoque alterado - buscar dados atualizados
