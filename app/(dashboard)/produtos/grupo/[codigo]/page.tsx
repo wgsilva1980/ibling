@@ -283,11 +283,13 @@ export default function EditarGrupoPage() {
 
       async function atualizarProduto(p: ProdutoEditavel) {
         let nome = p.nomeBase;
+        let nomeVariacao: string | undefined;
         if (p.cor || p.tamanho) {
           const atributos = [];
           if (p.cor) atributos.push(`COR:${p.cor}`);
           if (p.tamanho) atributos.push(`TAM:${p.tamanho}`);
-          nome = `${p.nomeBase} ${atributos.join(';')}`;
+          nomeVariacao = atributos.join(';');
+          nome = `${p.nomeBase} ${nomeVariacao}`;
         }
 
         // Se é novo (id = 0), enviar como nova criação
@@ -307,7 +309,9 @@ export default function EditarGrupoPage() {
           return { ok: res.ok, status: res.status, data: await res.json() };
         }
 
-        // Caso contrário, atualizar existente
+        // Caso contrário, atualizar existente. produtoPaiId/nomeVariacao
+        // precisam ser reenviados sempre - se omitidos, o Bling desvincula
+        // esta variação do produto pai.
         const res = await fetch(`/api/bling/produtos/${p.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -316,6 +320,8 @@ export default function EditarGrupoPage() {
             preco: p.preco,
             situacao: p.situacao,
             categoriaId,
+            produtoPaiId,
+            nomeVariacao,
           }),
         });
         return { ok: res.ok, status: res.status, data: await res.json() };
