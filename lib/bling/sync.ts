@@ -5,6 +5,37 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// O endpoint de listagem do Bling (/produtos) e os payloads de webhook não
+// retornam o campo aninhado "variacao" (nome com COR/TAM, produtoPai) que só
+// vem no endpoint de detalhe (/produtos/{id}). Para não perder essa
+// informação em re-sincronizações, preservamos o "variacao" já salvo quando
+// o novo payload não o traz.
+export function mesclarRaw(rawExistente: any, rawNovo: any): any {
+  if (rawExistente?.variacao && !rawNovo.variacao) {
+    return { ...rawNovo, variacao: rawExistente.variacao };
+  }
+  return rawNovo;
+}
+
+async function buscarRawExistente(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  ids: number[]
+): Promise<Map<number, any>> {
+  const mapa = new Map<number, any>();
+
+  for (let i = 0; i < ids.length; i += 500) {
+    const lote = ids.slice(i, i + 500);
+    const { data } = await supabase
+      .from('bling_produtos')
+      .select('id, raw')
+      .in('id', lote);
+
+    (data || []).forEach((row: any) => mapa.set(row.id, row.raw));
+  }
+
+  return mapa;
+}
+
 export async function syncInicial(): Promise<{
   totalProdutos: number;
   totalEstoques: number;
@@ -42,6 +73,10 @@ export async function syncInicial(): Promise<{
 
     console.log(`Total de produtos encontrados: ${todosProdutos.length}`);
 
+    // Buscar dados "raw" já salvos para preservar informações que só existem
+    // no endpoint de detalhe (ex: variacao.nome com COR/TAM)
+    const rawsExistentes = await buscarRawExistente(supabase, todosProdutos.map((p) => p.id));
+
     // Armazenar produtos
     for (const p of todosProdutos) {
       try {
@@ -52,7 +87,7 @@ export async function syncInicial(): Promise<{
             nome: p.nome,
             preco: p.preco,
             situacao: p.situacao,
-            raw: p,
+            raw: mesclarRaw(rawsExistentes.get(p.id), p),
             atualizado_em: new Date().toISOString(),
           },
           { onConflict: 'id' }
@@ -158,7 +193,10 @@ export async function syncIncremental(dataAlteracaoInicial: string): Promise<{
       `/produtos?dataAlteracaoInicial=${dataAlteracaoInicial}&limite=100`
     );
 
-    for (const p of resp.data || []) {
+    const produtosAlterados = resp.data || [];
+    const rawsExistentes = await buscarRawExistente(supabase, produtosAlterados.map((p: any) => p.id));
+
+    for (const p of produtosAlterados) {
       try {
         await supabase.from('bling_produtos').upsert(
           {
@@ -167,7 +205,7 @@ export async function syncIncremental(dataAlteracaoInicial: string): Promise<{
             nome: p.nome,
             preco: p.preco,
             situacao: p.situacao,
-            raw: p,
+            raw: mesclarRaw(rawsExistentes.get(p.id), p),
             atualizado_em: new Date().toISOString(),
           },
           { onConflict: 'id' }

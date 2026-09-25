@@ -59,28 +59,33 @@ function extrairAtributosDeTexto(texto: string): Atributos {
 function extrairAtributos(nome: string, raw?: any): { nomeBase: string; atributos: Atributos; ehVariacao: boolean } {
   const padraoAtributo = /(?:COR[,:]{1,2}|Cor[,:]{1,2}|TAM[,:]{1,2}|Tam[,:]{1,2}|TAMANHO[,:]{1,2}|Tamanho[,:]{1,2})/i;
 
-  // Caso 2: variação do Bling com atributos em campo aninhado
+  // Sinal mais robusto de que é variação: idProdutoPai, presente tanto no
+  // endpoint de listagem quanto no de detalhe do Bling (diferente de
+  // raw.variacao, que só vem no endpoint de detalhe e pode ser perdido
+  // em re-sincronizações).
+  const idProdutoPai = raw?.idProdutoPai || raw?.variacao?.produtoPai?.id;
+  const ehVariacaoPorId = !!idProdutoPai && idProdutoPai !== 0;
+
+  // nomeBase é sempre derivado do campo "nome" principal: se ele tiver
+  // atributos embutidos (produtos criados pela própria app), corta o
+  // prefixo; senão usa o nome inteiro (que já é o nome base comum entre
+  // pai e variações no formato do Bling). Nunca usar raw.variacao.nome
+  // aqui, pois ele descreve só os atributos, não o nome base.
+  const primeiroAtributoNoNome = nome.search(padraoAtributo);
+  const nomeBase = primeiroAtributoNoNome !== -1
+    ? nome.substring(0, primeiroAtributoNoNome).trim()
+    : nome.trim();
+
+  // Fonte dos atributos: preferir raw.variacao.nome (mais específico e
+  // presente mesmo quando o nome principal não traz COR/TAM embutido);
+  // cai para o próprio nome quando ausente.
   const nomeVariacao = raw?.variacao?.nome as string | undefined;
-  if (nomeVariacao && padraoAtributo.test(nomeVariacao)) {
-    return {
-      nomeBase: nome.trim(),
-      atributos: extrairAtributosDeTexto(nomeVariacao),
-      ehVariacao: true,
-    };
-  }
+  const textoAtributos = nomeVariacao && padraoAtributo.test(nomeVariacao) ? nomeVariacao : nome;
+  const atributos = extrairAtributosDeTexto(textoAtributos);
 
-  // Caso 1: atributos embutidos no próprio nome
-  const primeiroAtributo = nome.search(padraoAtributo);
-  if (primeiroAtributo !== -1) {
-    return {
-      nomeBase: nome.substring(0, primeiroAtributo).trim(),
-      atributos: extrairAtributosDeTexto(nome),
-      ehVariacao: true,
-    };
-  }
+  const ehVariacao = ehVariacaoPorId || primeiroAtributoNoNome !== -1 || !!(atributos.cor || atributos.tamanho);
 
-  // Sem atributos: é o produto pai (ou produto simples sem variações)
-  return { nomeBase: nome.trim(), atributos: {}, ehVariacao: false };
+  return { nomeBase, atributos, ehVariacao };
 }
 
 // Agrupar produtos por nome base
