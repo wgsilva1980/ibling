@@ -1,4 +1,5 @@
 import { blingRequest } from '@/lib/bling/client';
+import { mesclarRaw } from '@/lib/bling/sync';
 import { createSupabaseClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -15,6 +16,13 @@ export async function POST(req: NextRequest) {
     // Produto atualizado ou criado
     if (event === 'product.updated' || event === 'product.created') {
       console.log(`Atualizando produto ${data.id}`);
+
+      const { data: produtoExistente } = await supabase
+        .from('bling_produtos')
+        .select('raw')
+        .eq('id', data.id)
+        .single();
+
       await supabase.from('bling_produtos').upsert(
         {
           id: data.id,
@@ -22,7 +30,7 @@ export async function POST(req: NextRequest) {
           nome: data.nome,
           preco: data.preco,
           situacao: data.situacao === 'A' ? 'Ativo' : (data.situacao === 'I' ? 'Inativo' : (data.situacao === 'E' ? 'Excluído' : data.situacao)),
-          raw: data,
+          raw: mesclarRaw(produtoExistente?.raw, data),
           atualizado_em: new Date().toISOString(),
         },
         { onConflict: 'id' }

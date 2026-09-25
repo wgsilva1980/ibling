@@ -92,16 +92,18 @@ export default function EditarGrupoPage() {
         }
 
         // Verificar se é uma variação; se for, redirecionar para o produto pai.
-        // Variações sincronizadas do Bling trazem o ID do pai em raw.variacao.produtoPai.id
-        const idPaiDireto = produtoEncontrado.raw?.variacao?.produtoPai?.id as number | undefined;
+        // idProdutoPai vem tanto do endpoint de lista quanto do de detalhe do Bling;
+        // raw.variacao.produtoPai.id é um fallback só disponível no endpoint de detalhe.
+        const idPaiDireto = (produtoEncontrado.raw?.idProdutoPai || produtoEncontrado.raw?.variacao?.produtoPai?.id) as number | undefined;
+        const idPaiDiretoValido = idPaiDireto && idPaiDireto !== 0 ? idPaiDireto : undefined;
         const { nomeBase: baseEncontrado, cor, tamanho } = extrairAtributos(produtoEncontrado.nome, produtoEncontrado.raw);
 
         let produtoPrincipal = produtoEncontrado;
-        if (idPaiDireto) {
+        if (idPaiDiretoValido) {
           const { data: paiDireto } = await supabase
             .from('bling_produtos')
             .select('*')
-            .eq('id', idPaiDireto)
+            .eq('id', idPaiDiretoValido)
             .single();
 
           if (paiDireto) {
@@ -148,7 +150,10 @@ export default function EditarGrupoPage() {
         const grupoMap = new Map<number, any>();
         (grupoPorNome || []).forEach(p => grupoMap.set(p.id, p));
         (todosComMesmoNome || [])
-          .filter(p => p.raw?.variacao?.produtoPai?.id === produtoPrincipal.id)
+          .filter(p => {
+            const idPai = p.raw?.idProdutoPai || p.raw?.variacao?.produtoPai?.id;
+            return idPai === produtoPrincipal.id;
+          })
           .forEach(p => grupoMap.set(p.id, p));
         const grupoData = Array.from(grupoMap.values());
 
