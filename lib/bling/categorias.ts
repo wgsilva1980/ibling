@@ -74,3 +74,62 @@ export async function syncCategorias(): Promise<{
     return { totalCategorias, status: 'erro', erro: error.message };
   }
 }
+
+async function salvarCategoriaLocal(categoria: any) {
+  const supabase = createSupabaseClient();
+  const categoriaPaiId = categoria.categoriaPai?.id && categoria.categoriaPai.id !== 0
+    ? categoria.categoriaPai.id
+    : null;
+
+  await supabase.from('bling_categorias').upsert(
+    {
+      id: categoria.id,
+      descricao: categoria.descricao,
+      categoria_pai_id: categoriaPaiId,
+      raw: categoria,
+      atualizado_em: new Date().toISOString(),
+    },
+    { onConflict: 'id' }
+  );
+}
+
+export async function criarCategoria(descricao: string, categoriaPaiId?: number | null) {
+  const corpo = {
+    descricao,
+    categoriaPai: { id: categoriaPaiId || 0 },
+  };
+
+  const response = await blingRequest('/categorias/produtos', {
+    method: 'POST',
+    body: JSON.stringify(corpo),
+  });
+
+  const categoriaCriada = response.data || response;
+
+  if (!categoriaCriada || !categoriaCriada.id) {
+    throw new Error('Falha ao criar categoria no Bling: resposta vazia ou sem ID');
+  }
+
+  // A resposta do POST pode vir sem os campos completos; buscar o detalhe
+  const detalhe = await blingRequest(`/categorias/produtos/${categoriaCriada.id}`);
+  await salvarCategoriaLocal(detalhe.data || categoriaCriada);
+
+  return detalhe.data || categoriaCriada;
+}
+
+export async function atualizarCategoria(id: number, descricao: string, categoriaPaiId?: number | null) {
+  const corpo = {
+    descricao,
+    categoriaPai: { id: categoriaPaiId || 0 },
+  };
+
+  await blingRequest(`/categorias/produtos/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(corpo),
+  });
+
+  const detalhe = await blingRequest(`/categorias/produtos/${id}`);
+  await salvarCategoriaLocal(detalhe.data);
+
+  return detalhe.data;
+}

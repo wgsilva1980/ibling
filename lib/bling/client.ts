@@ -34,5 +34,7 @@ export async function blingRequest(
     throw new Error(`Bling API error ${response.status}: ${error}`);
   }
 
-  return response.json();
+  // Alguns endpoints (ex: PUT de categorias) retornam sucesso sem corpo
+  const texto = await response.text();
+  return texto ? JSON.parse(texto) : null;
 }
