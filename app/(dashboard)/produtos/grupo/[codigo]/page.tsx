@@ -161,6 +161,7 @@ export default function EditarGrupoPage() {
           .from('bling_produtos')
           .select('*')
           .ilike('nome', `${base}%`)
+          .neq('situacao', 'Excluído')
           .order('codigo');
 
         if (erroGrupo) throw erroGrupo;
@@ -169,6 +170,7 @@ export default function EditarGrupoPage() {
           .from('bling_produtos')
           .select('*')
           .eq('nome', produtoPrincipal.nome)
+          .neq('situacao', 'Excluído')
           .order('codigo');
 
         const grupoMap = new Map<number, any>();
