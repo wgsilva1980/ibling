@@ -11,6 +11,12 @@ interface Produto {
   nome: string;
   preco: number;
   situacao: string;
+  raw?: any;
+}
+
+interface Categoria {
+  id: number;
+  descricao: string;
 }
 
 interface Atributos {
@@ -56,6 +62,8 @@ export default function EditProdutoPage() {
   const [atributos, setAtributos] = useState<Atributos>({});
   const [ehVariacao, setEhVariacao] = useState(false);
   const [atualizarTodos, setAtualizarTodos] = useState(false);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [categoriaId, setCategoriaId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -65,6 +73,18 @@ export default function EditProdutoPage() {
     preco: '',
     situacao: 'Ativo',
   });
+
+  useEffect(() => {
+    async function loadCategorias() {
+      const { data } = await supabase
+        .from('bling_categorias')
+        .select('id, descricao')
+        .order('descricao');
+      setCategorias(data || []);
+    }
+    loadCategorias();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     async function loadProduto() {
@@ -89,6 +109,7 @@ export default function EditProdutoPage() {
         setNomeBase(base);
         setAtributos(attr);
         setEhVariacao(isVariacao);
+        setCategoriaId(data.raw?.categoria?.id || null);
 
         setFormData({
           nome: data.nome || '',
@@ -168,6 +189,7 @@ export default function EditProdutoPage() {
               nome: p.nome,
               preco: parseFloat(formData.preco),
               situacao: p.situacao,
+              categoriaId,
             }),
           })
         );
@@ -187,6 +209,7 @@ export default function EditProdutoPage() {
             nome: nomeFinal,
             preco: parseFloat(formData.preco),
             situacao: formData.situacao,
+            categoriaId,
           }),
         });
 
@@ -336,6 +359,40 @@ export default function EditProdutoPage() {
               boxSizing: 'border-box',
             }}
           />
+        </div>
+
+        {/* Categoria */}
+        <div>
+          <label
+            htmlFor="categoria"
+            style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+            }}
+          >
+            Categoria
+          </label>
+          <select
+            id="categoria"
+            value={categoriaId ?? ''}
+            onChange={(e) => setCategoriaId(e.target.value ? Number(e.target.value) : null)}
+            disabled={saving}
+            style={{
+              width: '100%',
+              padding: '10px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '14px',
+              boxSizing: 'border-box',
+            }}
+          >
+            <option value="">Sem categoria</option>
+            {categorias.map((c) => (
+              <option key={c.id} value={c.id}>{c.descricao}</option>
+            ))}
+          </select>
         </div>
 
         {/* Cor e Tamanho - Mostrar apenas se for variação */}

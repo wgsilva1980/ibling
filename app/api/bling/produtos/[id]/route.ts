@@ -11,7 +11,7 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    const { nome, preco, descricaoCurta, descricaoComplementar, situacao } = body;
+    const { nome, preco, descricaoCurta, descricaoComplementar, situacao, categoriaId } = body;
 
     if (!nome || !preco) {
       return NextResponse.json(
@@ -60,6 +60,10 @@ export async function PUT(
       formato,
     };
 
+    if (categoriaId) {
+      blingPayload.categoria = { id: Number(categoriaId) };
+    }
+
     // Se for variação, incluir variações do Bling
     if (formato === 'V' && blingProduto?.variacoes) {
       blingPayload.variacoes = blingProduto.variacoes;
@@ -73,11 +77,16 @@ export async function PUT(
       body: JSON.stringify(blingPayload),
     });
 
-    // Atualizar no Supabase
+    // Atualizar no Supabase (mescla a categoria no raw já salvo, sem perder outros campos)
+    const rawAtualizado = categoriaId
+      ? { ...(produtoAtual.raw || {}), categoria: { id: Number(categoriaId) } }
+      : produtoAtual.raw;
+
     await supabase.from('bling_produtos').update({
       nome,
       preco: parseFloat(preco.toString()),
       situacao: situacao || 'Ativo',
+      raw: rawAtualizado,
       atualizado_em: new Date().toISOString(),
     }).eq('id', id);
 
