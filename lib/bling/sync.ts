@@ -6,15 +6,22 @@ function sleep(ms: number): Promise<void> {
 }
 
 // O endpoint de listagem do Bling (/produtos) e os payloads de webhook não
-// retornam o campo aninhado "variacao" (nome com COR/TAM, produtoPai) que só
-// vem no endpoint de detalhe (/produtos/{id}). Para não perder essa
-// informação em re-sincronizações, preservamos o "variacao" já salvo quando
-// o novo payload não o traz.
+// retornam os campos "variacao" (nome com COR/TAM, produtoPai) nem
+// "categoria", que só vêm no endpoint de detalhe (/produtos/{id}). Para não
+// perder essa informação em re-sincronizações, preservamos o que já estava
+// salvo quando o novo payload não os traz.
 export function mesclarRaw(rawExistente: any, rawNovo: any): any {
+  const resultado = { ...rawNovo };
+
   if (rawExistente?.variacao && !rawNovo.variacao) {
-    return { ...rawNovo, variacao: rawExistente.variacao };
+    resultado.variacao = rawExistente.variacao;
   }
-  return rawNovo;
+
+  if (rawExistente?.categoria && !rawNovo.categoria) {
+    resultado.categoria = rawExistente.categoria;
+  }
+
+  return resultado;
 }
 
 async function buscarRawExistente(
@@ -244,5 +251,79 @@ export async function syncIncremental(dataAlteracaoInicial: string): Promise<{
       status: 'erro',
       erro: error.message,
     };
+  }
+}
+
+// Busca o detalhe individual (/produtos/{id}) de cada produto já sincronizado.
+// Necessário porque o endpoint de listagem não traz "categoria" nem
+// "variacao" - só assim o filtro de categoria e os atributos de cor/tamanho
+// ficam completos para o catálogo inteiro, não só para produtos editados
+// manualmente. É uma operação longa (uma requisição por produto).
+export async function syncDetalhesCompletos(): Promise<{
+  totalProcessados: number;
+  totalAtualizados: number;
+  status: 'sucesso' | 'erro';
+  erro?: string;
+}> {
+  const supabase = createSupabaseClient();
+  let totalProcessados = 0;
+  let totalAtualizados = 0;
+
+  try {
+    console.log('Iniciando sincronização de detalhes completos...');
+
+    const { data: produtos, error: fetchError } = await supabase
+      .from('bling_produtos')
+      .select('id, raw')
+      .neq('situacao', 'Excluído');
+
+    if (fetchError) throw fetchError;
+
+    const total = (produtos || []).length;
+    console.log(`Total de produtos a processar: ${total}`);
+
+    for (const produto of produtos || []) {
+      try {
+        const resp = await blingRequest(`/produtos/${produto.id}`);
+        const detalhe = resp.data;
+
+        if (detalhe) {
+          await supabase.from('bling_produtos').update({
+            raw: mesclarRaw(produto.raw, detalhe),
+            atualizado_em: new Date().toISOString(),
+          }).eq('id', produto.id);
+          totalAtualizados++;
+        }
+      } catch (error) {
+        console.error(`Erro ao buscar detalhe do produto ${produto.id}:`, error);
+      }
+
+      totalProcessados++;
+      if (totalProcessados % 50 === 0) {
+        console.log(`  Progresso: ${totalProcessados}/${total}`);
+      }
+
+      await sleep(350); // Respeitar rate limit
+    }
+
+    console.log(`Sincronização de detalhes concluída: ${totalAtualizados}/${totalProcessados}`);
+
+    await supabase.from('bling_sync_log').insert({
+      tipo: 'detalhes_completos',
+      status: 'sucesso',
+      detalhes: { total_processados: totalProcessados, total_atualizados: totalAtualizados },
+    });
+
+    return { totalProcessados, totalAtualizados, status: 'sucesso' };
+  } catch (error: any) {
+    console.error('Erro na sincronização de detalhes completos:', error);
+
+    await supabase.from('bling_sync_log').insert({
+      tipo: 'detalhes_completos',
+      status: 'erro',
+      detalhes: { erro: error.message, total_processados: totalProcessados },
+    });
+
+    return { totalProcessados, totalAtualizados, status: 'erro', erro: error.message };
   }
 }
