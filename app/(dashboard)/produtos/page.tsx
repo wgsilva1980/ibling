@@ -31,6 +31,8 @@ interface GrupoProduto {
   variacoes: ProdutoComAtributos[];
   estoqueTotal: number;
   expandido: boolean;
+  categoriaId?: number;
+  categoriaNome?: string;
 }
 
 // Extrair atributos (COR/TAM) de um texto usando o padrão COR:x;TAM:y
@@ -136,7 +138,27 @@ export default function ProdutosPage() {
   const [apenasComPrecoDiferente, setApenasComPrecoDiferente] = useState(false);
   const [cores, setCores] = useState<string[]>([]);
   const [tamanhos, setTamanhos] = useState<string[]>([]);
+  const [categoriaFilter, setCategoriaFilter] = useState<string>('');
+  const [categoriasMap, setCategoriasMap] = useState<Map<number, string>>(new Map());
+  const [categoriasLista, setCategoriasLista] = useState<{ id: number; descricao: string }[]>([]);
   const supabase = createSupabaseClientBrowser();
+
+  useEffect(() => {
+    async function fetchCategorias() {
+      const { data } = await supabase
+        .from('bling_categorias')
+        .select('id, descricao')
+        .order('descricao');
+
+      const mapa = new Map<number, string>();
+      (data || []).forEach((c) => mapa.set(c.id, c.descricao));
+      setCategoriasMap(mapa);
+      setCategoriasLista(data || []);
+    }
+
+    fetchCategorias();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     async function fetchProdutos() {
@@ -199,10 +221,23 @@ export default function ProdutosPage() {
         setTamanhos(tamanhoUnicos);
 
         // Agrupar TODOS os produtos primeiro
-        const gruposAgrupados = agruparProdutos(produtosComAtributos);
+        const gruposAgrupados = agruparProdutos(produtosComAtributos).map(grupo => {
+          const categoriaId = grupo.pai?.raw?.categoria?.id as number | undefined;
+          return {
+            ...grupo,
+            categoriaId,
+            categoriaNome: categoriaId ? categoriasMap.get(categoriaId) : undefined,
+          };
+        });
 
         // Depois filtrar os grupos inteiros
         let gruposFiltrados = gruposAgrupados;
+
+        if (categoriaFilter) {
+          gruposFiltrados = gruposFiltrados.filter(
+            grupo => grupo.categoriaId === Number(categoriaFilter)
+          );
+        }
 
         // Se houver filtro de cor ou tamanho, mostrar grupo se qualquer variação combina
         if (corFilter || tamanhoFilter) {
@@ -254,7 +289,7 @@ export default function ProdutosPage() {
     }
 
     fetchProdutos();
-  }, [search, situacaoFilter, corFilter, tamanhoFilter, apenasComEstoque, apenasComPrecoDiferente, supabase]);
+  }, [search, situacaoFilter, corFilter, tamanhoFilter, categoriaFilter, apenasComEstoque, apenasComPrecoDiferente, categoriasMap, supabase]);
 
   function toggleGrupo(index: number) {
     setGrupos(grupos.map((g, i) =>
@@ -353,6 +388,22 @@ export default function ProdutosPage() {
           </select>
 
           <select
+            value={categoriaFilter}
+            onChange={(e) => setCategoriaFilter(e.target.value)}
+            style={{
+              padding: '8px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '14px'
+            }}
+          >
+            <option value="">Todas as categorias</option>
+            {categoriasLista.map(c => (
+              <option key={c.id} value={c.id}>{c.descricao}</option>
+            ))}
+          </select>
+
+          <select
             value={corFilter}
             onChange={(e) => setCorFilter(e.target.value)}
             style={{
@@ -444,6 +495,7 @@ export default function ProdutosPage() {
               <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '2px solid #e5e7eb' }}>
                 <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', width: '40px' }}></th>
                 <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Produto</th>
+                <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Categoria</th>
                 <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Cor</th>
                 <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Tamanho</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Preço</th>
@@ -464,6 +516,9 @@ export default function ProdutosPage() {
                     </td>
                     <td style={{ padding: '12px', fontSize: '14px', fontWeight: '600' }}>
                       {grupo.nomeBase} {grupo.pai && `(${grupo.pai.codigo})`}
+                    </td>
+                    <td style={{ padding: '12px', fontSize: '13px', color: '#666' }}>
+                      {grupo.categoriaNome || '—'}
                     </td>
                     <td></td>
                     <td></td>
@@ -539,6 +594,7 @@ export default function ProdutosPage() {
                       <td style={{ padding: '12px', fontSize: '13px', color: '#666' }}>
                         ├─ Var. {variacao.codigo}
                       </td>
+                      <td></td>
                       <td style={{ padding: '12px', fontSize: '13px' }}>
                         {variacao.atributos.cor || '—'}
                       </td>

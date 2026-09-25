@@ -114,6 +114,16 @@ export default function DashboardLayout({
           }}>
             Produtos
           </Link>
+          <Link href="/categorias" style={{
+            padding: '12px',
+            borderRadius: '4px',
+            textDecoration: 'none',
+            color: '#0066cc',
+            fontSize: '14px',
+            fontWeight: '500'
+          }}>
+            Categorias
+          </Link>
         </nav>
 
         {/* Main Content */}
