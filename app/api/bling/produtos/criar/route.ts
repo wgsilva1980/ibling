@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { nome, preco, situacao, produtoPaiId } = body;
+    const { nome, preco, situacao, produtoPaiId, categoriaId } = body;
 
     if (!nome || !preco) {
       return NextResponse.json(
@@ -58,6 +58,10 @@ export async function POST(req: NextRequest) {
       tipo: 'P',
       formato: 'S',
     };
+
+    if (categoriaId) {
+      corpo.categoria = { id: Number(categoriaId) };
+    }
 
     console.log(`Criando produto/variação no Bling:`, JSON.stringify(corpo, null, 2));
 

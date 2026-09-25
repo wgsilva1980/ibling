@@ -73,6 +73,22 @@ export default function EditarGrupoPage() {
   const [success, setSuccess] = useState(false);
   const [adicionandoVariacao, setAdicionandoVariacao] = useState(false);
   const [produtoPaiId, setProdutoPaiId] = useState<number | null>(null);
+  const [categorias, setCategorias] = useState<{ id: number; descricao: string }[]>([]);
+  const [categoriaId, setCategoriaId] = useState<number | null>(null);
+  const [categoriaIdOriginal, setCategoriaIdOriginal] = useState<number | null>(null);
+  const [paiInfo, setPaiInfo] = useState<{ nome: string; preco: number; situacao: string } | null>(null);
+
+  useEffect(() => {
+    async function loadCategorias() {
+      const { data } = await supabase
+        .from('bling_categorias')
+        .select('id, descricao')
+        .order('descricao');
+      setCategorias(data || []);
+    }
+    loadCategorias();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     async function loadGrupo() {
@@ -131,6 +147,14 @@ export default function EditarGrupoPage() {
         setProdutoPaiId(produtoPrincipal.id);
         const { nomeBase: base } = extrairAtributos(produtoPrincipal.nome, produtoPrincipal.raw);
         setNomeBase(base);
+        const categoriaAtual = produtoPrincipal.raw?.categoria?.id || null;
+        setCategoriaId(categoriaAtual);
+        setCategoriaIdOriginal(categoriaAtual);
+        setPaiInfo({
+          nome: produtoPrincipal.nome,
+          preco: produtoPrincipal.preco,
+          situacao: produtoPrincipal.situacao,
+        });
 
         // Buscar todos os produtos do grupo: por nome (fluxo antigo) OU por produtoPai.id (fluxo Bling)
         const { data: grupoPorNome, error: erroGrupo } = await supabase
@@ -225,9 +249,17 @@ export default function EditarGrupoPage() {
     console.log(`[FRONTEND] produtoPaiId atual: ${produtoPaiId}`);
     console.log(`[FRONTEND] produtoPaiId tipo: ${typeof produtoPaiId}`);
 
-    const produtosComMudancas = produtos.filter(p => p.editando);
+    const categoriaMudou = categoriaId !== categoriaIdOriginal;
 
-    if (produtosComMudancas.length === 0) {
+    // Se a categoria mudou, ela precisa ser propagada para TODAS as
+    // variações existentes, não só as que o usuário editou manualmente
+    const produtosParaAtualizar = categoriaMudou
+      ? produtos.map(p => (p.id !== 0 && !p.editando ? { ...p, editando: true } : p))
+      : produtos;
+
+    const produtosComMudancas = produtosParaAtualizar.filter(p => p.editando);
+
+    if (produtosComMudancas.length === 0 && !categoriaMudou) {
       setError('Nenhuma mudança para salvar');
       return;
     }
@@ -268,6 +300,7 @@ export default function EditarGrupoPage() {
               preco: p.preco,
               situacao: p.situacao,
               produtoPaiId,
+              categoriaId,
             }),
           });
           return { ok: res.ok, status: res.status, data: await res.json() };
@@ -281,10 +314,28 @@ export default function EditarGrupoPage() {
             nome,
             preco: p.preco,
             situacao: p.situacao,
+            categoriaId,
           }),
         });
         return { ok: res.ok, status: res.status, data: await res.json() };
       });
+
+      // Se a categoria do grupo mudou, atualizar também o produto pai
+      // (ele não está na lista "produtos", que só contém as variações)
+      if (categoriaId !== categoriaIdOriginal && produtoPaiId && paiInfo) {
+        todasAsAtualizacoes.push(
+          fetch(`/api/bling/produtos/${produtoPaiId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              nome: paiInfo.nome,
+              preco: paiInfo.preco,
+              situacao: paiInfo.situacao,
+              categoriaId,
+            }),
+          }).then(async (res) => ({ ok: res.ok, status: res.status, data: await res.json() }))
+        );
+      }
 
       const resultados = await Promise.all(todasAsAtualizacoes);
       const todosOk = resultados.every(r => r.ok);
@@ -320,6 +371,8 @@ export default function EditarGrupoPage() {
     );
   }
 
+  const semMudancas = produtos.every(p => !p.editando) && categoriaId === categoriaIdOriginal;
+
   return (
     <div style={{ padding: '24px' }}>
       <div style={{ marginBottom: '24px' }}>
@@ -330,9 +383,36 @@ export default function EditarGrupoPage() {
         <h2 style={{ marginTop: '8px', marginBottom: '8px' }}>
           Editar Grupo: {nomeBase}
         </h2>
-        <p style={{ color: '#666', fontSize: '14px', margin: 0 }}>
+        <p style={{ color: '#666', fontSize: '14px', margin: '0 0 12px 0' }}>
           {produtos.length} produto(s) no grupo
         </p>
+
+        <div>
+          <label
+            htmlFor="categoriaGrupo"
+            style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '500' }}
+          >
+            Categoria (aplicada a todas as variações e ao produto principal)
+          </label>
+          <select
+            id="categoriaGrupo"
+            value={categoriaId ?? ''}
+            onChange={(e) => setCategoriaId(e.target.value ? Number(e.target.value) : null)}
+            disabled={saving}
+            style={{
+              padding: '8px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '13px',
+              minWidth: '240px',
+            }}
+          >
+            <option value="">Sem categoria</option>
+            {categorias.map((c) => (
+              <option key={c.id} value={c.id}>{c.descricao}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -512,16 +592,16 @@ export default function EditarGrupoPage() {
       <div style={{ display: 'flex', gap: '12px' }}>
         <button
           onClick={handleSalvar}
-          disabled={saving || produtos.every(p => !p.editando)}
+          disabled={saving || semMudancas}
           style={{
             padding: '12px 24px',
-            backgroundColor: saving || produtos.every(p => !p.editando) ? '#ccc' : '#22c55e',
+            backgroundColor: saving || semMudancas ? '#ccc' : '#22c55e',
             color: 'white',
             border: 'none',
             borderRadius: '4px',
             fontSize: '14px',
             fontWeight: 'bold',
-            cursor: saving || produtos.every(p => !p.editando) ? 'not-allowed' : 'pointer',
+            cursor: saving || semMudancas ? 'not-allowed' : 'pointer',
           }}
         >
           {saving ? 'Salvando...' : 'Salvar Alterações'}
