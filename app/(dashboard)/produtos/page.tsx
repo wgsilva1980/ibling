@@ -147,6 +147,7 @@ export default function ProdutosPage() {
         let query = supabase
           .from('bling_produtos')
           .select('id, codigo, nome, preco, situacao, saldo_fisico_total, raw')
+          .neq('situacao', 'Excluído')
           .order('nome');
 
         // Aplicar filtros
