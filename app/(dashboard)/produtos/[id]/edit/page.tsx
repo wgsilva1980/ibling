@@ -64,6 +64,7 @@ export default function EditProdutoPage() {
   const [atualizarTodos, setAtualizarTodos] = useState(false);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriaId, setCategoriaId] = useState<number | null>(null);
+  const [produtoPaiId, setProdutoPaiId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -110,6 +111,7 @@ export default function EditProdutoPage() {
         setAtributos(attr);
         setEhVariacao(isVariacao);
         setCategoriaId(data.raw?.categoria?.id || null);
+        setProdutoPaiId(data.raw?.idProdutoPai || data.raw?.variacao?.produtoPai?.id || null);
 
         setFormData({
           nome: data.nome || '',
@@ -180,9 +182,19 @@ export default function EditProdutoPage() {
           return;
         }
 
-        // Atualizar preço de todos os produtos do grupo
-        const todasAsAtualizacoes = produtosRelacionados.map(p =>
-          fetch(`/api/bling/produtos/${p.id}`, {
+        // Atualizar preço de todos os produtos do grupo. produtoPaiId/nomeVariacao
+        // são reenviados sempre - se omitidos, o Bling desvincula a variação do pai.
+        const todasAsAtualizacoes = produtosRelacionados.map(p => {
+          const { atributos: attrP } = extrairAtributos(p.nome);
+          const nomeVariacaoP = p.raw?.variacao?.nome
+            || [attrP.cor && `COR:${attrP.cor}`, attrP.tamanho && `TAM:${attrP.tamanho}`].filter(Boolean).join(';') || undefined;
+          // Só é variação (e só recebe produtoPaiId) se tiver um nome de
+          // atributos - o próprio produto pai, presente nesta lista, não tem.
+          const paiIdP = nomeVariacaoP
+            ? (p.raw?.idProdutoPai || p.raw?.variacao?.produtoPai?.id || produtoPaiId)
+            : undefined;
+
+          return fetch(`/api/bling/produtos/${p.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -190,9 +202,11 @@ export default function EditProdutoPage() {
               preco: parseFloat(formData.preco),
               situacao: p.situacao,
               categoriaId,
+              produtoPaiId: paiIdP,
+              nomeVariacao: nomeVariacaoP,
             }),
-          })
-        );
+          });
+        });
 
         const resultados = await Promise.all(todasAsAtualizacoes);
         const todosOk = resultados.every(r => r.ok);
@@ -201,7 +215,13 @@ export default function EditProdutoPage() {
           throw new Error('Erro ao atualizar alguns produtos');
         }
       } else {
-        // Atualizar apenas este produto
+        // Atualizar apenas este produto. produtoPaiId/nomeVariacao só fazem
+        // sentido quando este produto é uma variação.
+        const atributosNomeAtual = [
+          formData.cor && `COR:${formData.cor}`,
+          formData.tamanho && `TAM:${formData.tamanho}`,
+        ].filter(Boolean).join(';');
+
         const response = await fetch(`/api/bling/produtos/${produtoId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -210,6 +230,8 @@ export default function EditProdutoPage() {
             preco: parseFloat(formData.preco),
             situacao: formData.situacao,
             categoriaId,
+            produtoPaiId: ehVariacao ? produtoPaiId : undefined,
+            nomeVariacao: ehVariacao ? (atributosNomeAtual || undefined) : undefined,
           }),
         });
 

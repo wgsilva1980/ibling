@@ -161,6 +161,7 @@ export default function EditarGrupoPage() {
           .from('bling_produtos')
           .select('*')
           .ilike('nome', `${base}%`)
+          .neq('situacao', 'Excluído')
           .order('codigo');
 
         if (erroGrupo) throw erroGrupo;
@@ -169,6 +170,7 @@ export default function EditarGrupoPage() {
           .from('bling_produtos')
           .select('*')
           .eq('nome', produtoPrincipal.nome)
+          .neq('situacao', 'Excluído')
           .order('codigo');
 
         const grupoMap = new Map<number, any>();
@@ -279,14 +281,15 @@ export default function EditarGrupoPage() {
       setError(null);
       setSuccess(false);
 
-      // Atualizar/criar cada produto
-      const todasAsAtualizacoes = produtosComMudancas.map(async (p) => {
+      async function atualizarProduto(p: ProdutoEditavel) {
         let nome = p.nomeBase;
+        let nomeVariacao: string | undefined;
         if (p.cor || p.tamanho) {
           const atributos = [];
           if (p.cor) atributos.push(`COR:${p.cor}`);
           if (p.tamanho) atributos.push(`TAM:${p.tamanho}`);
-          nome = `${p.nomeBase} ${atributos.join(';')}`;
+          nomeVariacao = atributos.join(';');
+          nome = `${p.nomeBase} ${nomeVariacao}`;
         }
 
         // Se é novo (id = 0), enviar como nova criação
@@ -306,7 +309,9 @@ export default function EditarGrupoPage() {
           return { ok: res.ok, status: res.status, data: await res.json() };
         }
 
-        // Caso contrário, atualizar existente
+        // Caso contrário, atualizar existente. produtoPaiId/nomeVariacao
+        // precisam ser reenviados sempre - se omitidos, o Bling desvincula
+        // esta variação do produto pai.
         const res = await fetch(`/api/bling/produtos/${p.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -315,29 +320,37 @@ export default function EditarGrupoPage() {
             preco: p.preco,
             situacao: p.situacao,
             categoriaId,
+            produtoPaiId,
+            nomeVariacao,
           }),
         });
         return { ok: res.ok, status: res.status, data: await res.json() };
-      });
+      }
+
+      // As atualizações são feitas em sequência (não em paralelo) para não
+      // estourar o rate limit do Bling - cada PUT do produto pai já dispara
+      // uma chamada extra internamente (busca as variações antes de salvar).
+      const resultados: { ok: boolean; status: number; data: any }[] = [];
+      for (const p of produtosComMudancas) {
+        resultados.push(await atualizarProduto(p));
+      }
 
       // Se a categoria do grupo mudou, atualizar também o produto pai
       // (ele não está na lista "produtos", que só contém as variações)
       if (categoriaId !== categoriaIdOriginal && produtoPaiId && paiInfo) {
-        todasAsAtualizacoes.push(
-          fetch(`/api/bling/produtos/${produtoPaiId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              nome: paiInfo.nome,
-              preco: paiInfo.preco,
-              situacao: paiInfo.situacao,
-              categoriaId,
-            }),
-          }).then(async (res) => ({ ok: res.ok, status: res.status, data: await res.json() }))
-        );
+        const res = await fetch(`/api/bling/produtos/${produtoPaiId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nome: paiInfo.nome,
+            preco: paiInfo.preco,
+            situacao: paiInfo.situacao,
+            categoriaId,
+          }),
+        });
+        resultados.push({ ok: res.ok, status: res.status, data: await res.json() });
       }
 
-      const resultados = await Promise.all(todasAsAtualizacoes);
       const todosOk = resultados.every(r => r.ok);
 
       if (!todosOk) {

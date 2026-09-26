@@ -1,5 +1,6 @@
 import { blingRequest } from '@/lib/bling/client';
 import { mesclarRaw } from '@/lib/bling/sync';
+import { normalizarSituacao } from '@/lib/bling/situacao';
 import { createSupabaseClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
           codigo: data.codigo,
           nome: data.nome,
           preco: data.preco,
-          situacao: data.situacao === 'A' ? 'Ativo' : (data.situacao === 'I' ? 'Inativo' : (data.situacao === 'E' ? 'Excluído' : data.situacao)),
+          situacao: normalizarSituacao(data.situacao),
           raw: mesclarRaw(produtoExistente?.raw, data),
           atualizado_em: new Date().toISOString(),
         },

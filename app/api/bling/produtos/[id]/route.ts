@@ -11,7 +11,7 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    const { nome, preco, descricaoCurta, descricaoComplementar, situacao, categoriaId } = body;
+    const { nome, preco, descricaoCurta, descricaoComplementar, situacao, categoriaId, produtoPaiId, nomeVariacao } = body;
 
     if (!nome || !preco) {
       return NextResponse.json(
@@ -37,15 +37,18 @@ export async function PUT(
     const tipo = produtoAtual.raw?.tipo || 'P';
     const formato = produtoAtual.raw?.formato || 'S';
 
-    // Se for variação, buscar produto completo do Bling para obter todas as variações
+    // Se for produto pai (com variações), o Bling exige que o array de
+    // variações seja reenviado em todo PUT, então buscamos o produto
+    // completo primeiro. Se essa busca falhar, é preciso interromper aqui
+    // (e não seguir com formato: 'V' sem variações) - senão o Bling rejeita
+    // a atualização por completo com um erro de validação confuso.
     let blingProduto: any = null;
     if (formato === 'V') {
-      try {
-        const response = await blingRequest(`/produtos/${id}`);
-        blingProduto = response.data;
-        console.log(`Produto atual do Bling:`, JSON.stringify(blingProduto, null, 2));
-      } catch (err) {
-        console.error('Erro ao buscar produto do Bling:', err);
+      const response = await blingRequest(`/produtos/${id}`);
+      blingProduto = response.data;
+
+      if (!blingProduto?.variacoes || blingProduto.variacoes.length === 0) {
+        throw new Error('O Bling não retornou nenhuma variação vinculada a este produto pai - a atualização foi interrompida para não enviar um payload inválido. Verifique se as variações ainda estão vinculadas a este produto no Bling.');
       }
     }
 
@@ -67,6 +70,23 @@ export async function PUT(
     // Se for variação, incluir variações do Bling
     if (formato === 'V' && blingProduto?.variacoes) {
       blingPayload.variacoes = blingProduto.variacoes;
+    }
+
+    // Se este produto É uma variação (tem produto pai), o Bling exige que o
+    // campo "variacao" (nome dos atributos + produtoPai) seja reenviado em
+    // todo PUT - se omitido, ele desvincula a variação do produto pai
+    // silenciosamente. produtoPaiId/nomeVariacao vêm do frontend (que já
+    // sabe essa relação); raw.variacao serve de fallback para chamadas
+    // antigas que ainda não enviam esses campos.
+    const idPaiFallback = produtoAtual.raw?.idProdutoPai || produtoAtual.raw?.variacao?.produtoPai?.id;
+    const idPaiFinal = produtoPaiId || idPaiFallback;
+    const nomeVariacaoFinal = nomeVariacao || produtoAtual.raw?.variacao?.nome;
+
+    if (formato !== 'V' && idPaiFinal && nomeVariacaoFinal) {
+      blingPayload.variacao = {
+        nome: nomeVariacaoFinal,
+        produtoPai: { id: Number(idPaiFinal) },
+      };
     }
 
     // Atualizar no Bling

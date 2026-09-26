@@ -1,4 +1,5 @@
 import { blingRequest } from './client';
+import { normalizarSituacao } from './situacao';
 import { createSupabaseClient } from '@/lib/supabase/server';
 
 function sleep(ms: number): Promise<void> {
@@ -93,7 +94,7 @@ export async function syncInicial(): Promise<{
             codigo: p.codigo,
             nome: p.nome,
             preco: p.preco,
-            situacao: p.situacao,
+            situacao: normalizarSituacao(p.situacao),
             raw: mesclarRaw(rawsExistentes.get(p.id), p),
             atualizado_em: new Date().toISOString(),
           },
@@ -211,7 +212,7 @@ export async function syncIncremental(dataAlteracaoInicial: string): Promise<{
             codigo: p.codigo,
             nome: p.nome,
             preco: p.preco,
-            situacao: p.situacao,
+            situacao: normalizarSituacao(p.situacao),
             raw: mesclarRaw(rawsExistentes.get(p.id), p),
             atualizado_em: new Date().toISOString(),
           },
