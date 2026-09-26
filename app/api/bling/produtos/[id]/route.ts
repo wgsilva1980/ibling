@@ -67,12 +67,17 @@ export async function PUT(
       formato,
     };
 
-    // id: 0 é a convenção do Bling para "sem categoria" (mesmo padrão usado
-    // em categoriaPai) - precisa ser enviado explicitamente quando o usuário
-    // escolhe "Sem categoria", senão o Bling simplesmente ignora o campo e
-    // mantém a categoria antiga.
+    // Testado empiricamente: nem categoria:{id:0} nem categoria:null removem
+    // a categoria no Bling - ele ignora silenciosamente e mantém a antiga
+    // (aparentemente a API do Bling só permite REATRIBUIR a categoria de um
+    // produto, nunca removê-la de vez). Ainda assim enviamos null quando o
+    // usuário pede "Sem categoria" - se um dia o Bling passar a aceitar, já
+    // funciona sem mudança de código - mas verificamos o resultado real
+    // abaixo para não mentir sucesso quando ele não aceitar.
+    const tentandoLimparCategoria = categoriaFoiInformada && !categoriaId && !!produtoAtual.raw?.categoria?.id;
+
     if (categoriaFoiInformada) {
-      blingPayload.categoria = { id: categoriaId ? Number(categoriaId) : 0 };
+      blingPayload.categoria = categoriaId ? { id: Number(categoriaId) } : null;
     }
 
     // Se for variação, incluir variações do Bling
@@ -105,12 +110,28 @@ export async function PUT(
       body: JSON.stringify(blingPayload),
     });
 
+    // Quando o usuário pede pra limpar a categoria, confirmamos direto no
+    // Bling se ele aceitou - não dá pra confiar no 200 da resposta do PUT,
+    // que retorna sucesso mesmo quando o campo é silenciosamente ignorado.
+    let categoriaFoiRealmenteLimpa = true;
+    if (tentandoLimparCategoria) {
+      const verificacao = await blingRequest(`/produtos/${id}`);
+      categoriaFoiRealmenteLimpa = !verificacao.data?.categoria?.id;
+    }
+
     // Atualizar no Supabase (mescla a categoria no raw já salvo, sem perder outros campos).
-    // categoria: null quando o usuário limpou a categoria - precisa ser null
-    // explícito (não apenas ausente) para que mesclarRaw() não a preserve
-    // como se fosse um campo simplesmente não retornado por outro payload.
+    // categoria: null quando o usuário limpou a categoria E o Bling confirmou
+    // - precisa ser null explícito (não apenas ausente) para que mesclarRaw()
+    // não a preserve como se fosse um campo simplesmente não retornado por
+    // outro payload. Se o Bling não aceitou a remoção, mantemos a categoria
+    // antiga local para não divergir do estado real.
     const rawAtualizado = categoriaFoiInformada
-      ? { ...(produtoAtual.raw || {}), categoria: categoriaId ? { id: Number(categoriaId) } : null }
+      ? {
+          ...(produtoAtual.raw || {}),
+          categoria: categoriaId
+            ? { id: Number(categoriaId) }
+            : (categoriaFoiRealmenteLimpa ? null : produtoAtual.raw?.categoria),
+        }
       : produtoAtual.raw;
 
     await supabase.from('bling_produtos').update({
@@ -129,7 +150,12 @@ export async function PUT(
     });
 
     return NextResponse.json(
-      { message: 'Produto atualizado com sucesso' },
+      tentandoLimparCategoria && !categoriaFoiRealmenteLimpa
+        ? {
+            message: 'Produto atualizado, mas a categoria não pôde ser removida',
+            aviso: 'O Bling não permite remover totalmente a categoria de um produto por esta API - só é possível reatribuí-la a outra categoria. A categoria anterior foi mantida.',
+          }
+        : { message: 'Produto atualizado com sucesso' },
       { status: 200 }
     );
   } catch (error: any) {

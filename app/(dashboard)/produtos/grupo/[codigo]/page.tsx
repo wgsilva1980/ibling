@@ -364,11 +364,19 @@ export default function EditarGrupoPage() {
         throw new Error(`Erro ao salvar produtos: ${erros.join('; ')}`);
       }
 
-      setSuccess(true);
+      // O Bling pode aceitar o PUT (200) mas ignorar silenciosamente a
+      // remoção de categoria - a rota sinaliza isso em "aviso".
+      const avisos = Array.from(new Set(resultados.map(r => r.data?.aviso).filter(Boolean)));
+
+      if (avisos.length > 0) {
+        setError(avisos[0] as string);
+      } else {
+        setSuccess(true);
+      }
       // Recarregar dados
       setTimeout(() => {
         window.location.reload();
-      }, 1000);
+      }, avisos.length > 0 ? 3500 : 1000);
     } catch (err: any) {
       setError(err.message || 'Erro ao salvar produtos');
     } finally {
