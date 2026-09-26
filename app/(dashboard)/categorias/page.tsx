@@ -326,7 +326,16 @@ export default function CategoriasPage() {
         throw new Error(result.error || 'Erro ao atualizar categoria');
       }
 
+      // carregarCategorias() reseta o erro para null no início - por isso
+      // ela precisa rodar ANTES de setarmos o aviso, senão ele é apagado
+      // assim que a recarga termina.
       await carregarCategorias();
+
+      // O Bling pode aceitar o PUT (200) mas ignorar silenciosamente a
+      // mudança de categoria pai - a rota sinaliza isso em "aviso".
+      if (result.aviso) {
+        setError(result.aviso);
+      }
     } catch (err: any) {
       setError(err.message || 'Erro ao atualizar categoria');
     } finally {

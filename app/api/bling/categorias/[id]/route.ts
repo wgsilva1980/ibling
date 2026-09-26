@@ -27,9 +27,16 @@ export async function PUT(
     }
 
     const categoria = await atualizarCategoria(idNumerico, descricao.trim(), categoriaPaiId || null);
+    const { _avisoParentNaoAlterado, ...categoriaLimpa } = categoria;
 
     return NextResponse.json(
-      { message: 'Categoria atualizada com sucesso', data: categoria },
+      _avisoParentNaoAlterado
+        ? {
+            message: 'Categoria atualizada, mas a categoria pai não pôde ser alterada',
+            aviso: 'O Bling não permite alterar a categoria pai de uma categoria já existente por esta API - isso só é possível na criação. A descrição foi salva normalmente.',
+            data: categoriaLimpa,
+          }
+        : { message: 'Categoria atualizada com sucesso', data: categoriaLimpa },
       { status: 200 }
     );
   } catch (error: any) {

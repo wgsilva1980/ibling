@@ -148,6 +148,11 @@ export async function criarCategoria(descricao: string, categoriaPaiId?: number 
 }
 
 export async function atualizarCategoria(id: number, descricao: string, categoriaPaiId?: number | null) {
+  // Confirmado no schema oficial do Bling: o PUT de categoria só aceita
+  // "id" e "descricao" - "categoriaPai" não faz parte do payload aceito
+  // (só o POST de criação aceita). Enviamos mesmo assim (caso o Bling
+  // passe a suportar um dia), mas não confiamos cegamente - comparamos
+  // com o resultado real abaixo para avisar quando não for aplicado.
   const corpo = {
     descricao,
     categoriaPai: { id: categoriaPaiId || 0 },
@@ -161,5 +166,9 @@ export async function atualizarCategoria(id: number, descricao: string, categori
   const detalhe = await blingRequest(`/categorias/produtos/${id}`);
   await salvarCategoriaLocal(detalhe.data);
 
-  return detalhe.data;
+  const paiDesejado = categoriaPaiId || 0;
+  const paiReal = detalhe.data?.categoriaPai?.id || 0;
+  const paiFoiAlterado = paiDesejado === paiReal;
+
+  return { ...detalhe.data, _avisoParentNaoAlterado: !paiFoiAlterado };
 }
