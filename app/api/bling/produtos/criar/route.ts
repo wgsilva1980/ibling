@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
             // Passo 2b: Fazer PUT no produto pai com a variação recém-criada
             const atributosDescricao = Object.entries(atributos).map(([k, v]) => `${k}:${v}`).join(';');
 
-            const variacao = {
+            const variacao: any = {
               id: novoId,
               nome: `${gerarCombinacoes.data.nome} ${atributosDescricao}`,
               codigo: codigo,
@@ -140,6 +140,14 @@ export async function POST(req: NextRequest) {
                 produtoPai: { id: idPai }
               }
             };
+
+            // Este PUT reconstrói a variação do zero - se a categoria
+            // definida no passo 1 (POST /produtos) não for reenviada aqui,
+            // o Bling a descarta ao vincular a variação ao produto pai (o
+            // mesmo padrão de bug já corrigido para o campo "variacao").
+            if (categoriaId) {
+              variacao.categoria = { id: Number(categoriaId) };
+            }
 
             console.log(`Fazendo PUT no produto pai ${idPai} com a variação:`, JSON.stringify(variacao, null, 2));
 
