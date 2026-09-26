@@ -173,8 +173,19 @@ export async function POST(req: NextRequest) {
 
             // Buscar o detalhe atualizado da própria variação - sem isso o
             // registro local fica sem variacao.produtoPai até a próxima
-            // sincronização de detalhes, e some do grupo de edição.
-            const detalheVariacao = await blingRequest(`/produtos/${novoId}`);
+            // sincronização de detalhes, e some do grupo de edição. Testado
+            // empiricamente: o Bling tem um atraso de propagação depois do
+            // PUT de vinculação, e às vezes esse atraso passa de 10s - as
+            // tentativas abaixo são só uma melhoria de esforço (pegam o caso
+            // comum rápido); se não conseguirem, a categoria já vem certa
+            // mesmo assim, e o vínculo completo é preenchido na próxima
+            // sincronização de detalhes (syncDetalhesCompletos).
+            let detalheVariacao: any = null;
+            for (let tentativa = 0; tentativa < 3; tentativa++) {
+              await new Promise((r) => setTimeout(r, 1200));
+              detalheVariacao = await blingRequest(`/produtos/${novoId}`);
+              if (detalheVariacao?.data?.variacao?.produtoPai?.id) break;
+            }
             if (detalheVariacao?.data) {
               rawFinal = detalheVariacao.data;
             }
@@ -188,16 +199,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Passo 3: Salvar no Supabase
-    await supabase.from('bling_produtos').insert({
-      id: novoId,
-      codigo,
-      nome,
-      preco: parseFloat(preco.toString()),
-      situacao,
-      raw: rawFinal,
-      atualizado_em: new Date().toISOString(),
-    });
+    // Passo 3: Salvar no Supabase. upsert (não insert) porque o Bling dispara
+    // um webhook "product.created" quase imediatamente após o POST do passo
+    // 1 - se ele chegar e gravar a linha antes deste passo (o que acontece
+    // com frequência, já que os passos 2a/2b levam um tempo), um insert
+    // simples falha silenciosamente por conflito de chave primária e deixa o
+    // rawFinal (mais completo, com variacao.produtoPai) sem efeito.
+    await supabase.from('bling_produtos').upsert(
+      {
+        id: novoId,
+        codigo,
+        nome,
+        preco: parseFloat(preco.toString()),
+        situacao,
+        raw: rawFinal,
+        atualizado_em: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
 
     // Registrar log
     await supabase.from('bling_sync_log').insert({
