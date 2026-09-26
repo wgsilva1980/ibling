@@ -11,14 +11,20 @@ function sleep(ms: number): Promise<void> {
 // "categoria", que só vêm no endpoint de detalhe (/produtos/{id}). Para não
 // perder essa informação em re-sincronizações, preservamos o que já estava
 // salvo quando o novo payload não os traz.
-export function mesclarRaw(rawExistente: any, rawNovo: any): any {
+//
+// origemDetalhe=true sinaliza que rawNovo veio do próprio endpoint de
+// detalhe, a fonte confiável para "categoria" - nesse caso a ausência do
+// campo significa que a categoria foi removida de verdade no Bling, e não
+// deve ser preservada (senão uma categoria removida direto no Bling seria
+// "ressuscitada" a cada sincronização de detalhes).
+export function mesclarRaw(rawExistente: any, rawNovo: any, opts?: { origemDetalhe?: boolean }): any {
   const resultado = { ...rawNovo };
 
   if (rawExistente?.variacao && !rawNovo.variacao) {
     resultado.variacao = rawExistente.variacao;
   }
 
-  if (rawExistente?.categoria && !rawNovo.categoria) {
+  if (!opts?.origemDetalhe && rawExistente?.categoria && !rawNovo.categoria) {
     resultado.categoria = rawExistente.categoria;
   }
 
@@ -290,7 +296,7 @@ export async function syncDetalhesCompletos(): Promise<{
 
         if (detalhe) {
           await supabase.from('bling_produtos').update({
-            raw: mesclarRaw(produto.raw, detalhe),
+            raw: mesclarRaw(produto.raw, detalhe, { origemDetalhe: true }),
             atualizado_em: new Date().toISOString(),
           }).eq('id', produto.id);
           totalAtualizados++;

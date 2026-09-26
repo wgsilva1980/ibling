@@ -12,6 +12,10 @@ export async function PUT(
   try {
     const body = await req.json();
     const { nome, preco, descricaoCurta, descricaoComplementar, situacao, categoriaId, produtoPaiId, nomeVariacao } = body;
+    // "categoriaId" vem sempre presente no body quando o front quer tocar a
+    // categoria (número para atribuir, null para "Sem categoria") - só fica
+    // ausente de fato quando um chamador não quer alterá-la.
+    const categoriaFoiInformada = Object.prototype.hasOwnProperty.call(body, 'categoriaId');
 
     if (!nome || !preco) {
       return NextResponse.json(
@@ -63,8 +67,12 @@ export async function PUT(
       formato,
     };
 
-    if (categoriaId) {
-      blingPayload.categoria = { id: Number(categoriaId) };
+    // id: 0 é a convenção do Bling para "sem categoria" (mesmo padrão usado
+    // em categoriaPai) - precisa ser enviado explicitamente quando o usuário
+    // escolhe "Sem categoria", senão o Bling simplesmente ignora o campo e
+    // mantém a categoria antiga.
+    if (categoriaFoiInformada) {
+      blingPayload.categoria = { id: categoriaId ? Number(categoriaId) : 0 };
     }
 
     // Se for variação, incluir variações do Bling
@@ -97,9 +105,12 @@ export async function PUT(
       body: JSON.stringify(blingPayload),
     });
 
-    // Atualizar no Supabase (mescla a categoria no raw já salvo, sem perder outros campos)
-    const rawAtualizado = categoriaId
-      ? { ...(produtoAtual.raw || {}), categoria: { id: Number(categoriaId) } }
+    // Atualizar no Supabase (mescla a categoria no raw já salvo, sem perder outros campos).
+    // categoria: null quando o usuário limpou a categoria - precisa ser null
+    // explícito (não apenas ausente) para que mesclarRaw() não a preserve
+    // como se fosse um campo simplesmente não retornado por outro payload.
+    const rawAtualizado = categoriaFoiInformada
+      ? { ...(produtoAtual.raw || {}), categoria: categoriaId ? { id: Number(categoriaId) } : null }
       : produtoAtual.raw;
 
     await supabase.from('bling_produtos').update({
