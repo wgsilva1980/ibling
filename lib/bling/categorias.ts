@@ -7,11 +7,13 @@ function sleep(ms: number): Promise<void> {
 
 export async function syncCategorias(): Promise<{
   totalCategorias: number;
+  totalRemovidas: number;
   status: 'sucesso' | 'erro';
   erro?: string;
 }> {
   const supabase = createSupabaseClient();
   let totalCategorias = 0;
+  let totalRemovidas = 0;
 
   try {
     console.log('Iniciando sincronização de categorias...');
@@ -55,13 +57,41 @@ export async function syncCategorias(): Promise<{
 
     console.log(`Categorias armazenadas: ${totalCategorias}`);
 
+    // Detectar categorias removidas no Bling: qualquer categoria local que
+    // não apareceu nesta listagem é candidata a remoção - mas a listagem
+    // paginada já demonstrou não trazer categorias válidas em alguns casos
+    // (ex: "Categoria padrão"), então ausência na lista sozinha não prova
+    // que foi excluída. Confirmamos cada candidata individualmente antes de
+    // apagar, para não perder uma categoria que só não veio na paginação.
+    const idsAtuais = new Set(todasCategorias.map((c) => c.id));
+    const { data: categoriasLocais } = await supabase.from('bling_categorias').select('id');
+    const candidatasRemocao = (categoriasLocais || [])
+      .map((r: any) => r.id)
+      .filter((id: number) => !idsAtuais.has(id));
+
+    for (const id of candidatasRemocao) {
+      try {
+        await blingRequest(`/categorias/produtos/${id}`);
+        // Não lançou erro - a categoria ainda existe no Bling, só não veio
+        // nesta página. Manter local.
+      } catch (error: any) {
+        if (/Bling API error 404/.test(error.message || '')) {
+          await supabase.from('bling_categorias').delete().eq('id', id);
+          totalRemovidas++;
+        }
+      }
+      await sleep(350);
+    }
+
+    console.log(`Categorias removidas (excluídas no Bling): ${totalRemovidas}`);
+
     await supabase.from('bling_sync_log').insert({
       tipo: 'categorias',
       status: 'sucesso',
-      detalhes: { total_categorias: totalCategorias },
+      detalhes: { total_categorias: totalCategorias, total_removidas: totalRemovidas },
     });
 
-    return { totalCategorias, status: 'sucesso' };
+    return { totalCategorias, totalRemovidas, status: 'sucesso' };
   } catch (error: any) {
     console.error('Erro na sincronização de categorias:', error);
 
@@ -71,7 +101,7 @@ export async function syncCategorias(): Promise<{
       detalhes: { erro: error.message },
     });
 
-    return { totalCategorias, status: 'erro', erro: error.message };
+    return { totalCategorias, totalRemovidas, status: 'erro', erro: error.message };
   }
 }
 

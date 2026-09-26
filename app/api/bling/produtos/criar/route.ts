@@ -82,6 +82,11 @@ export async function POST(req: NextRequest) {
     const novoId = produtoData.id;
     console.log(`✅ Produto criado com sucesso no Bling: ${novoId}`);
 
+    // Guarda o payload mais recente e completo do produto - atualizado
+    // abaixo após a vinculação ao pai (passo 2), já que produtoData (do
+    // POST inicial) ainda não tem variacao.produtoPai preenchido.
+    let rawFinal: any = produtoData;
+
     // Passo 2: Vincular seria feito aqui, mas desabilitado temporariamente para evitar erros
     // TODO: Debug do endpoint de gerar-combinacoes
     console.log(`ℹ️ produtoPaiId recebido: ${produtoPaiId}`);
@@ -165,6 +170,14 @@ export async function POST(req: NextRequest) {
 
             console.log(`Resposta do PUT:`, JSON.stringify(putResponse, null, 2));
             console.log(`✅ Variação vinculada com sucesso ao produto ${idPai}!`)
+
+            // Buscar o detalhe atualizado da própria variação - sem isso o
+            // registro local fica sem variacao.produtoPai até a próxima
+            // sincronização de detalhes, e some do grupo de edição.
+            const detalheVariacao = await blingRequest(`/produtos/${novoId}`);
+            if (detalheVariacao?.data) {
+              rawFinal = detalheVariacao.data;
+            }
           }
         } catch (err: any) {
           console.error(`❌ ERRO ao vincular variação ao produto pai ${idPai}:`);
@@ -182,7 +195,7 @@ export async function POST(req: NextRequest) {
       nome,
       preco: parseFloat(preco.toString()),
       situacao,
-      raw: response.data,
+      raw: rawFinal,
       atualizado_em: new Date().toISOString(),
     });
 
