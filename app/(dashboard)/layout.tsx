@@ -124,6 +124,16 @@ export default function DashboardLayout({
           }}>
             Categorias
           </Link>
+          <Link href="/lojas" style={{
+            padding: '12px',
+            borderRadius: '4px',
+            textDecoration: 'none',
+            color: '#0066cc',
+            fontSize: '14px',
+            fontWeight: '500'
+          }}>
+            Canais de Venda
+          </Link>
         </nav>
 
         {/* Main Content */}
