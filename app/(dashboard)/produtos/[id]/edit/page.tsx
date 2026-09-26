@@ -160,6 +160,7 @@ export default function EditProdutoPage() {
       setSaving(true);
       setError(null);
       setSuccess(false);
+      let avisoDetectado: string | undefined;
 
       // Reconstruir nome com atributos se for variação
       let nomeFinal = formData.nomeBase;
@@ -214,6 +215,11 @@ export default function EditProdutoPage() {
         if (!todosOk) {
           throw new Error('Erro ao atualizar alguns produtos');
         }
+
+        // O Bling pode aceitar o PUT (200) mas ignorar silenciosamente a
+        // remoção de categoria - a rota sinaliza isso em "aviso".
+        const corpos = await Promise.all(resultados.map(r => r.json()));
+        avisoDetectado = corpos.find(c => c?.aviso)?.aviso;
       } else {
         // Atualizar apenas este produto. produtoPaiId/nomeVariacao só fazem
         // sentido quando este produto é uma variação.
@@ -240,12 +246,18 @@ export default function EditProdutoPage() {
         if (!response.ok) {
           throw new Error(result.error || 'Erro ao salvar produto');
         }
+
+        avisoDetectado = result?.aviso;
       }
 
-      setSuccess(true);
+      if (avisoDetectado) {
+        setError(avisoDetectado);
+      } else {
+        setSuccess(true);
+      }
       setTimeout(() => {
         router.push(`/produtos/${params.id}`);
-      }, 1500);
+      }, avisoDetectado ? 3500 : 1500);
     } catch (err: any) {
       setError(err.message || 'Erro ao salvar produto');
     } finally {
