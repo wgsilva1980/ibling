@@ -17,12 +17,14 @@ interface VinculoProduto {
   codigo: string;
   preco: number;
   preco_promocional: number;
+  atualizado_em: string;
 }
 
 interface Produto {
   id: number;
   codigo: string;
   nome: string;
+  atualizado_em: string;
 }
 
 export default function LojasPage() {
@@ -37,6 +39,8 @@ export default function LojasPage() {
   const [sugestoesProduto, setSugestoesProduto] = useState<Produto[]>([]);
   const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
   const [sincronizandoProduto, setSincronizandoProduto] = useState(false);
+  const [sincronizandoLinha, setSincronizandoLinha] = useState<number | null>(null);
+  const [apenasPendentes, setApenasPendentes] = useState(false);
   const supabase = createSupabaseClientBrowser();
 
   async function carregarDados() {
@@ -47,7 +51,7 @@ export default function LojasPage() {
       const [{ data: canaisData, error: canaisError }, { data: vinculosData, error: vinculosError }] =
         await Promise.all([
           supabase.from('bling_canais_venda').select('id, descricao, tipo, situacao').order('descricao'),
-          supabase.from('bling_produtos_lojas').select('id, produto_id, canal_venda_id, codigo, preco, preco_promocional'),
+          supabase.from('bling_produtos_lojas').select('id, produto_id, canal_venda_id, codigo, preco, preco_promocional, atualizado_em'),
         ]);
 
       if (canaisError) throw canaisError;
@@ -60,7 +64,7 @@ export default function LojasPage() {
       if (idsProdutos.length > 0) {
         const { data: produtosData, error: produtosError } = await supabase
           .from('bling_produtos')
-          .select('id, codigo, nome')
+          .select('id, codigo, nome, atualizado_em')
           .in('id', idsProdutos);
 
         if (produtosError) throw produtosError;
@@ -92,7 +96,7 @@ export default function LojasPage() {
 
       const { data } = await supabase
         .from('bling_produtos')
-        .select('id, codigo, nome')
+        .select('id, codigo, nome, atualizado_em')
         .or(`nome.ilike.%${buscaProduto}%,codigo.ilike.%${buscaProduto}%`)
         .order('nome')
         .limit(10);
@@ -136,6 +140,26 @@ export default function LojasPage() {
     }
   }
 
+  async function handleSincronizarLinha(produtoId: number) {
+    try {
+      setSincronizandoLinha(produtoId);
+      setError(null);
+
+      const response = await fetch(`/api/bling/lojas/sync?produtoId=${produtoId}`);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao sincronizar produto');
+      }
+
+      await carregarDados();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao sincronizar produto');
+    } finally {
+      setSincronizandoLinha(null);
+    }
+  }
+
   async function handleSincronizar() {
     try {
       setSincronizando(true);
@@ -157,9 +181,22 @@ export default function LojasPage() {
   }
 
   const canaisMap = new Map(canais.map((c) => [c.id, c]));
-  const vinculosFiltrados = canalFiltro
-    ? vinculos.filter((v) => v.canal_venda_id === canalFiltro)
-    : vinculos;
+
+  // Um vínculo fica "pendente" quando o produto foi alterado (no app ou via
+  // webhook do Bling) depois da última vez que esse vínculo específico foi
+  // sincronizado - não precisa chamar o Bling pra descobrir isso, é só
+  // comparar os dois timestamps que já temos localmente.
+  function estaPendente(v: VinculoProduto): boolean {
+    const produto = produtosMap.get(v.produto_id);
+    if (!produto) return false;
+    return new Date(produto.atualizado_em).getTime() > new Date(v.atualizado_em).getTime();
+  }
+
+  const vinculosFiltrados = vinculos
+    .filter((v) => (canalFiltro ? v.canal_venda_id === canalFiltro : true))
+    .filter((v) => (apenasPendentes ? estaPendente(v) : true));
+
+  const totalPendentes = vinculos.filter(estaPendente).length;
 
   return (
     <div>
@@ -357,9 +394,35 @@ export default function LojasPage() {
             })}
           </div>
 
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            {totalPendentes > 0 && (
+              <span style={{
+                padding: '4px 10px',
+                backgroundColor: '#fef3c7',
+                color: '#92400e',
+                borderRadius: '4px',
+                fontSize: '13px',
+                fontWeight: '600',
+              }}>
+                {totalPendentes} produto(s) pendente(s) de sincronização
+              </span>
+            )}
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={apenasPendentes}
+                onChange={(e) => setApenasPendentes(e.target.checked)}
+              />
+              Mostrar só pendentes
+            </label>
+          </div>
+
           {vinculosFiltrados.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>
-              Nenhum produto vinculado {canalFiltro ? 'a este canal' : 'a canais de venda ainda'}.
+              {apenasPendentes
+                ? 'Nenhum produto pendente de sincronização.'
+                : `Nenhum produto vinculado ${canalFiltro ? 'a este canal' : 'a canais de venda ainda'}.`}
             </div>
           ) : (
             <div style={{
@@ -376,14 +439,17 @@ export default function LojasPage() {
                     <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>Código no canal</th>
                     <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Preço</th>
                     <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Preço promocional</th>
+                    <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>Situação</th>
+                    <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>Ação</th>
                   </tr>
                 </thead>
                 <tbody>
                   {vinculosFiltrados.map((v) => {
                     const produto = produtosMap.get(v.produto_id);
                     const canal = canaisMap.get(v.canal_venda_id);
+                    const pendente = estaPendente(v);
                     return (
-                      <tr key={v.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                      <tr key={v.id} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: pendente ? '#fffbeb' : 'transparent' }}>
                         <td style={{ padding: '12px', fontSize: '14px' }}>
                           {produto ? `${produto.nome} (${produto.codigo})` : `Produto #${v.produto_id}`}
                         </td>
@@ -398,6 +464,38 @@ export default function LojasPage() {
                         </td>
                         <td style={{ padding: '12px', fontSize: '14px', textAlign: 'right' }}>
                           {v.preco_promocional ? `R$ ${Number(v.preco_promocional).toFixed(2)}` : '—'}
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'center' }}>
+                          <span style={{
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            backgroundColor: pendente ? '#fde68a' : '#dcfce7',
+                            color: pendente ? '#92400e' : '#166534',
+                          }}>
+                            {pendente ? 'Pendente' : 'Sincronizado'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'center' }}>
+                          {pendente && (
+                            <button
+                              onClick={() => handleSincronizarLinha(v.produto_id)}
+                              disabled={sincronizandoLinha === v.produto_id}
+                              style={{
+                                padding: '4px 10px',
+                                backgroundColor: sincronizandoLinha === v.produto_id ? '#ccc' : '#3b82f6',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                cursor: sincronizandoLinha === v.produto_id ? 'not-allowed' : 'pointer',
+                              }}
+                            >
+                              {sincronizandoLinha === v.produto_id ? 'Sincronizando...' : 'Sincronizar'}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
