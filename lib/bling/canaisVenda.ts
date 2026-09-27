@@ -115,9 +115,38 @@ export async function syncProdutosLojas(): Promise<{
   }
 }
 
-// Sincroniza só os vínculos de um produto específico (filtro idProduto do
-// Bling), em vez de percorrer o catálogo inteiro - útil quando o usuário só
-// quer atualizar/conferir um produto pontual com os canais de venda.
+// Acha o id do produto pai de um produto (o próprio id quando ele já é o pai
+// ou um produto sem variações), a partir dos dois formatos em que essa
+// relação pode vir salva no raw (lista vs. detalhe do Bling - mesmo fallback
+// usado em produtos/[id]/route.ts e nas telas de grupo).
+function idPaiDe(produto: { id: number; raw?: any }): number {
+  return produto.raw?.idProdutoPai || produto.raw?.variacao?.produtoPai?.id || produto.id;
+}
+
+// Resolve o produto informado para o grupo inteiro (produto pai + todas as
+// variações) - a sincronização com lojas sempre parte do pai e leva as
+// variações junto, mesmo que o usuário tenha selecionado só uma variação.
+async function resolverGrupoProdutoIds(produtoId: number): Promise<number[]> {
+  const supabase = createSupabaseClient();
+  const { data: todos } = await supabase
+    .from('bling_produtos')
+    .select('id, raw')
+    .neq('situacao', 'Excluído');
+
+  const produtos = todos || [];
+  const alvo = produtos.find((p: any) => p.id === produtoId);
+  if (!alvo) return [produtoId];
+
+  const idPaiAlvo = idPaiDe(alvo);
+  const idsGrupo = produtos.filter((p: any) => idPaiDe(p) === idPaiAlvo).map((p: any) => p.id);
+
+  return idsGrupo.length > 0 ? idsGrupo : [produtoId];
+}
+
+// Sincroniza os vínculos de um produto específico e de todo o seu grupo
+// (produto pai + variações), em vez de percorrer o catálogo inteiro - útil
+// quando o usuário só quer atualizar/conferir um produto pontual com os
+// canais de venda.
 export async function syncProdutoLoja(produtoId: number): Promise<{
   totalVinculos: number;
   status: 'sucesso' | 'erro';
@@ -127,27 +156,30 @@ export async function syncProdutoLoja(produtoId: number): Promise<{
   let totalVinculos = 0;
 
   try {
-    console.log(`Iniciando sincronização de produto x lojas (produto ${produtoId})...`);
+    const idsGrupo = await resolverGrupoProdutoIds(produtoId);
+    console.log(`Iniciando sincronização de produto x lojas (produto ${produtoId}, grupo: ${idsGrupo.join(', ')})...`);
 
     const { data: canaisExistentes } = await supabase.from('bling_canais_venda').select('id');
     const canaisConhecidos = new Set<number>((canaisExistentes || []).map((c: any) => c.id));
 
-    let pagina = 1;
-    let vinculosProduto: any[] = [];
+    let vinculosGrupo: any[] = [];
 
-    while (true) {
-      const resp = await blingRequest(`/produtos/lojas?idProduto=${produtoId}&pagina=${pagina}&limite=100`);
+    for (const id of idsGrupo) {
+      let pagina = 1;
+      while (true) {
+        const resp = await blingRequest(`/produtos/lojas?idProduto=${id}&pagina=${pagina}&limite=100`);
 
-      if (!resp.data || resp.data.length === 0) break;
+        if (!resp.data || resp.data.length === 0) break;
 
-      vinculosProduto = vinculosProduto.concat(resp.data);
-      pagina++;
-      await sleep(350); // Respeitar rate limit
+        vinculosGrupo = vinculosGrupo.concat(resp.data);
+        pagina++;
+        await sleep(350); // Respeitar rate limit
+      }
     }
 
-    console.log(`Vínculos encontrados para o produto ${produtoId}: ${vinculosProduto.length}`);
+    console.log(`Vínculos encontrados para o grupo do produto ${produtoId}: ${vinculosGrupo.length}`);
 
-    const idsCanais = new Set<number>(vinculosProduto.map((v) => v.loja?.id).filter(Boolean));
+    const idsCanais = new Set<number>(vinculosGrupo.map((v) => v.loja?.id).filter(Boolean));
     for (const idCanal of idsCanais) {
       if (!canaisConhecidos.has(idCanal)) {
         await sincronizarCanalVenda(idCanal, canaisConhecidos);
@@ -155,7 +187,7 @@ export async function syncProdutoLoja(produtoId: number): Promise<{
       }
     }
 
-    for (const v of vinculosProduto) {
+    for (const v of vinculosGrupo) {
       try {
         await supabase.from('bling_produtos_lojas').upsert(
           {
@@ -179,7 +211,7 @@ export async function syncProdutoLoja(produtoId: number): Promise<{
     await supabase.from('bling_sync_log').insert({
       tipo: 'produtos_lojas',
       status: 'sucesso',
-      detalhes: { produto_id: produtoId, total_vinculos: totalVinculos },
+      detalhes: { produto_id: produtoId, grupo: idsGrupo, total_vinculos: totalVinculos },
     });
 
     return { totalVinculos, status: 'sucesso' };

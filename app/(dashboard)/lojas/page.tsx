@@ -27,20 +27,38 @@ interface Produto {
   atualizado_em: string;
 }
 
+interface ProdutoCompleto {
+  id: number;
+  codigo: string;
+  nome: string;
+  raw?: any;
+}
+
+// Acha o id do produto pai (o próprio id quando ele já é o pai ou um produto
+// sem variações) - mesmo fallback usado no backend, entre os dois formatos
+// em que essa relação pode vir salva no raw (lista vs. detalhe do Bling).
+function idPaiDe(produto: ProdutoCompleto): number {
+  return produto.raw?.idProdutoPai || produto.raw?.variacao?.produtoPai?.id || produto.id;
+}
+
 export default function LojasPage() {
   const [canais, setCanais] = useState<CanalVenda[]>([]);
   const [vinculos, setVinculos] = useState<VinculoProduto[]>([]);
   const [produtosMap, setProdutosMap] = useState<Map<number, Produto>>(new Map());
+  const [todosProdutos, setTodosProdutos] = useState<ProdutoCompleto[]>([]);
   const [loading, setLoading] = useState(true);
   const [sincronizando, setSincronizando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [canalFiltro, setCanalFiltro] = useState<number | ''>('');
-  const [buscaProduto, setBuscaProduto] = useState('');
-  const [sugestoesProduto, setSugestoesProduto] = useState<Produto[]>([]);
-  const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
-  const [sincronizandoProduto, setSincronizandoProduto] = useState(false);
   const [sincronizandoLinha, setSincronizandoLinha] = useState<number | null>(null);
   const [apenasPendentes, setApenasPendentes] = useState(false);
+
+  // Grid de seleção múltipla para sincronizar vários produtos de uma vez
+  const [buscaGrid, setBuscaGrid] = useState('');
+  const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
+  const [sincronizandoSelecionados, setSincronizandoSelecionados] = useState(false);
+  const [progressoSelecionados, setProgressoSelecionados] = useState<{ atual: number; total: number } | null>(null);
+
   const supabase = createSupabaseClientBrowser();
 
   async function carregarDados() {
@@ -48,17 +66,23 @@ export default function LojasPage() {
       setLoading(true);
       setError(null);
 
-      const [{ data: canaisData, error: canaisError }, { data: vinculosData, error: vinculosError }] =
-        await Promise.all([
-          supabase.from('bling_canais_venda').select('id, descricao, tipo, situacao').order('descricao'),
-          supabase.from('bling_produtos_lojas').select('id, produto_id, canal_venda_id, codigo, preco, preco_promocional, atualizado_em'),
-        ]);
+      const [
+        { data: canaisData, error: canaisError },
+        { data: vinculosData, error: vinculosError },
+        { data: todosProdutosData, error: todosProdutosError },
+      ] = await Promise.all([
+        supabase.from('bling_canais_venda').select('id, descricao, tipo, situacao').order('descricao'),
+        supabase.from('bling_produtos_lojas').select('id, produto_id, canal_venda_id, codigo, preco, preco_promocional, atualizado_em'),
+        supabase.from('bling_produtos').select('id, codigo, nome, raw').neq('situacao', 'Excluído').order('nome'),
+      ]);
 
       if (canaisError) throw canaisError;
       if (vinculosError) throw vinculosError;
+      if (todosProdutosError) throw todosProdutosError;
 
       setCanais(canaisData || []);
       setVinculos(vinculosData || []);
+      setTodosProdutos(todosProdutosData || []);
 
       const idsProdutos = Array.from(new Set((vinculosData || []).map((v) => v.produto_id)));
       if (idsProdutos.length > 0) {
@@ -87,56 +111,44 @@ export default function LojasPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    async function buscarSugestoes() {
-      if (produtoSelecionado || buscaProduto.trim().length < 2) {
-        setSugestoesProduto([]);
-        return;
+  function toggleSelecionado(id: number) {
+    setSelecionados((prev) => {
+      const novo = new Set(prev);
+      if (novo.has(id)) {
+        novo.delete(id);
+      } else {
+        novo.add(id);
       }
-
-      const { data } = await supabase
-        .from('bling_produtos')
-        .select('id, codigo, nome, atualizado_em')
-        .or(`nome.ilike.%${buscaProduto}%,codigo.ilike.%${buscaProduto}%`)
-        .order('nome')
-        .limit(10);
-
-      setSugestoesProduto(data || []);
-    }
-
-    buscarSugestoes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buscaProduto, produtoSelecionado]);
-
-  function handleSelecionarProduto(produto: Produto) {
-    setProdutoSelecionado(produto);
-    setBuscaProduto('');
-    setSugestoesProduto([]);
+      return novo;
+    });
   }
 
-  function handleLimparProdutoSelecionado() {
-    setProdutoSelecionado(null);
-  }
-
-  async function handleSincronizarProduto() {
-    if (!produtoSelecionado) return;
+  async function handleSincronizarSelecionados() {
+    const ids = Array.from(selecionados);
+    if (ids.length === 0) return;
 
     try {
-      setSincronizandoProduto(true);
+      setSincronizandoSelecionados(true);
       setError(null);
 
-      const response = await fetch(`/api/bling/lojas/sync?produtoId=${produtoSelecionado.id}`);
-      const result = await response.json();
+      for (let i = 0; i < ids.length; i++) {
+        setProgressoSelecionados({ atual: i + 1, total: ids.length });
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Erro ao sincronizar produto');
+        const response = await fetch(`/api/bling/lojas/sync?produtoId=${ids[i]}`);
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || `Erro ao sincronizar produto ${ids[i]}`);
+        }
       }
 
+      setSelecionados(new Set());
       await carregarDados();
     } catch (err: any) {
-      setError(err.message || 'Erro ao sincronizar produto');
+      setError(err.message || 'Erro ao sincronizar produtos selecionados');
     } finally {
-      setSincronizandoProduto(false);
+      setSincronizandoSelecionados(false);
+      setProgressoSelecionados(null);
     }
   }
 
@@ -198,6 +210,23 @@ export default function LojasPage() {
 
   const totalPendentes = vinculos.filter(estaPendente).length;
 
+  // Só produtos pais (ou sem variação) aparecem no grid - selecionar um já
+  // leva o grupo inteiro (variações) junto, resolvido no backend.
+  const idsVinculados = new Set(vinculos.map((v) => v.produto_id));
+  const produtosPais = todosProdutos.filter((p) => idPaiDe(p) === p.id);
+
+  function grupoTemVinculo(paiId: number): boolean {
+    return todosProdutos.some((p) => idPaiDe(p) === paiId && idsVinculados.has(p.id));
+  }
+
+  const buscaGridLower = buscaGrid.trim().toLowerCase();
+  const paisFiltrados = produtosPais.filter(
+    (p) =>
+      buscaGridLower.length === 0 ||
+      p.nome.toLowerCase().includes(buscaGridLower) ||
+      p.codigo.toLowerCase().includes(buscaGridLower)
+  );
+
   return (
     <div>
       <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
@@ -226,7 +255,7 @@ export default function LojasPage() {
         </button>
       </div>
 
-      {/* Sincronizar um produto específico */}
+      {/* Grid de seleção múltipla para sincronizar vários produtos */}
       <div style={{
         marginBottom: '24px',
         padding: '16px',
@@ -235,38 +264,101 @@ export default function LojasPage() {
         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
       }}>
         <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>
-          Sincronizar um produto específico
+          Sincronizar produtos selecionados
+        </div>
+        <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#666' }}>
+          Selecione um ou mais produtos (a sincronização parte sempre do produto pai e leva todas as variações junto).
+        </p>
+
+        <input
+          type="text"
+          placeholder="Filtrar por nome ou código..."
+          value={buscaGrid}
+          onChange={(e) => setBuscaGrid(e.target.value)}
+          style={{
+            width: '100%',
+            maxWidth: '400px',
+            padding: '8px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            fontSize: '14px',
+            boxSizing: 'border-box',
+            marginBottom: '12px',
+          }}
+        />
+
+        <div style={{
+          maxHeight: '260px',
+          overflowY: 'auto',
+          border: '1px solid #e5e7eb',
+          borderRadius: '4px',
+        }}>
+          {paisFiltrados.length === 0 ? (
+            <div style={{ padding: '16px', textAlign: 'center', color: '#666', fontSize: '13px' }}>
+              Nenhum produto encontrado.
+            </div>
+          ) : (
+            paisFiltrados.map((p) => {
+              const temVinculo = grupoTemVinculo(p.id);
+              return (
+                <label
+                  key={p.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '8px 12px',
+                    borderBottom: '1px solid #f3f4f6',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    backgroundColor: selecionados.has(p.id) ? '#eff6ff' : 'transparent',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selecionados.has(p.id)}
+                    onChange={() => toggleSelecionado(p.id)}
+                  />
+                  <span style={{ flex: 1 }}>{p.nome} ({p.codigo})</span>
+                  <span style={{
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    backgroundColor: temVinculo ? '#dcfce7' : '#fee2e2',
+                    color: temVinculo ? '#166534' : '#991b1b',
+                  }}>
+                    {temVinculo ? 'Já vinculado' : 'Nunca vinculado'}
+                  </span>
+                </label>
+              );
+            })
+          )}
         </div>
 
-        {produtoSelecionado ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <span style={{
-              padding: '6px 12px',
-              backgroundColor: '#eff6ff',
-              color: '#1d4ed8',
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px' }}>
+          <button
+            onClick={handleSincronizarSelecionados}
+            disabled={selecionados.size === 0 || sincronizandoSelecionados}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: selecionados.size === 0 || sincronizandoSelecionados ? '#ccc' : '#3b82f6',
+              color: 'white',
+              border: 'none',
               borderRadius: '4px',
               fontSize: '14px',
-            }}>
-              {produtoSelecionado.nome} ({produtoSelecionado.codigo})
-            </span>
+              fontWeight: 'bold',
+              cursor: selecionados.size === 0 || sincronizandoSelecionados ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {sincronizandoSelecionados
+              ? `Sincronizando ${progressoSelecionados?.atual ?? 0}/${progressoSelecionados?.total ?? selecionados.size}...`
+              : `Sincronizar ${selecionados.size} selecionado(s)`}
+          </button>
+
+          {selecionados.size > 0 && !sincronizandoSelecionados && (
             <button
-              onClick={handleSincronizarProduto}
-              disabled={sincronizandoProduto}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: sincronizandoProduto ? '#ccc' : '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '14px',
-                fontWeight: 'bold',
-                cursor: sincronizandoProduto ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {sincronizandoProduto ? 'Sincronizando...' : 'Sincronizar este produto'}
-            </button>
-            <button
-              onClick={handleLimparProdutoSelecionado}
+              onClick={() => setSelecionados(new Set())}
               style={{
                 padding: '8px 16px',
                 backgroundColor: 'transparent',
@@ -277,59 +369,10 @@ export default function LojasPage() {
                 cursor: 'pointer',
               }}
             >
-              Trocar produto
+              Limpar seleção
             </button>
-          </div>
-        ) : (
-          <div style={{ position: 'relative', maxWidth: '400px' }}>
-            <input
-              type="text"
-              placeholder="Buscar produto por nome ou código..."
-              value={buscaProduto}
-              onChange={(e) => setBuscaProduto(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '14px',
-                boxSizing: 'border-box',
-              }}
-            />
-
-            {sugestoesProduto.length > 0 && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                right: 0,
-                backgroundColor: 'white',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                marginTop: '4px',
-                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
-                zIndex: 10,
-                maxHeight: '240px',
-                overflowY: 'auto',
-              }}>
-                {sugestoesProduto.map((p) => (
-                  <div
-                    key={p.id}
-                    onClick={() => handleSelecionarProduto(p)}
-                    style={{
-                      padding: '8px 12px',
-                      fontSize: '14px',
-                      cursor: 'pointer',
-                      borderBottom: '1px solid #f3f4f6',
-                    }}
-                  >
-                    {p.nome} <span style={{ color: '#999' }}>({p.codigo})</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {error && (
