@@ -5,10 +5,12 @@ export async function GET(req: NextRequest) {
   try {
     const produtoIdParam = req.nextUrl.searchParams.get('produtoId');
     const produtoId = produtoIdParam ? Number(produtoIdParam) : null;
+    const canalVendaIdParam = req.nextUrl.searchParams.get('canalVendaId');
+    const canalVendaId = canalVendaIdParam ? Number(canalVendaIdParam) : undefined;
 
     if (produtoId) {
-      console.log(`Iniciando sincronização de produto x lojas (produto ${produtoId})...`);
-      const result = await syncProdutoLoja(produtoId);
+      console.log(`Iniciando sincronização de produto x lojas (produto ${produtoId}, canal: ${canalVendaId ?? 'todos'})...`);
+      const result = await syncProdutoLoja(produtoId, canalVendaId);
 
       if (result.status === 'erro') {
         return NextResponse.json(result, { status: 500 });

@@ -125,7 +125,7 @@ export default function LojasPage() {
 
   async function handleSincronizarSelecionados() {
     const ids = Array.from(selecionados);
-    if (ids.length === 0) return;
+    if (ids.length === 0 || !canalFiltro) return;
 
     try {
       setSincronizandoSelecionados(true);
@@ -134,7 +134,7 @@ export default function LojasPage() {
       for (let i = 0; i < ids.length; i++) {
         setProgressoSelecionados({ atual: i + 1, total: ids.length });
 
-        const response = await fetch(`/api/bling/lojas/sync?produtoId=${ids[i]}`);
+        const response = await fetch(`/api/bling/lojas/sync?produtoId=${ids[i]}&canalVendaId=${canalFiltro}`);
         const result = await response.json();
 
         if (!response.ok) {
@@ -152,12 +152,12 @@ export default function LojasPage() {
     }
   }
 
-  async function handleSincronizarLinha(produtoId: number) {
+  async function handleSincronizarLinha(produtoId: number, canalVendaId: number) {
     try {
       setSincronizandoLinha(produtoId);
       setError(null);
 
-      const response = await fetch(`/api/bling/lojas/sync?produtoId=${produtoId}`);
+      const response = await fetch(`/api/bling/lojas/sync?produtoId=${produtoId}&canalVendaId=${canalVendaId}`);
       const result = await response.json();
 
       if (!response.ok) {
@@ -204,19 +204,21 @@ export default function LojasPage() {
     return new Date(produto.atualizado_em).getTime() > new Date(v.atualizado_em).getTime();
   }
 
-  const vinculosFiltrados = vinculos
-    .filter((v) => (canalFiltro ? v.canal_venda_id === canalFiltro : true))
-    .filter((v) => (apenasPendentes ? estaPendente(v) : true));
+  const vinculosDoCanal = canalFiltro ? vinculos.filter((v) => v.canal_venda_id === canalFiltro) : vinculos;
 
-  const totalPendentes = vinculos.filter(estaPendente).length;
+  const vinculosFiltrados = vinculosDoCanal.filter((v) => (apenasPendentes ? estaPendente(v) : true));
+
+  const totalPendentes = vinculosDoCanal.filter(estaPendente).length;
 
   // Só produtos pais (ou sem variação) aparecem no grid - selecionar um já
-  // leva o grupo inteiro (variações) junto, resolvido no backend.
-  const idsVinculados = new Set(vinculos.map((v) => v.produto_id));
+  // leva o grupo inteiro (variações) junto, resolvido no backend. "Já
+  // vinculado" é sempre relativo ao canal selecionado acima - o mesmo
+  // produto pode estar vinculado num canal e não em outro.
+  const idsVinculadosNoCanal = new Set(vinculosDoCanal.map((v) => v.produto_id));
   const produtosPais = todosProdutos.filter((p) => idPaiDe(p) === p.id);
 
   function grupoTemVinculo(paiId: number): boolean {
-    return todosProdutos.some((p) => idPaiDe(p) === paiId && idsVinculados.has(p.id));
+    return todosProdutos.some((p) => idPaiDe(p) === paiId && idsVinculadosNoCanal.has(p.id));
   }
 
   const buscaGridLower = buscaGrid.trim().toLowerCase();
@@ -255,126 +257,6 @@ export default function LojasPage() {
         </button>
       </div>
 
-      {/* Grid de seleção múltipla para sincronizar vários produtos */}
-      <div style={{
-        marginBottom: '24px',
-        padding: '16px',
-        backgroundColor: 'white',
-        borderRadius: '4px',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-      }}>
-        <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>
-          Sincronizar produtos selecionados
-        </div>
-        <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#666' }}>
-          Selecione um ou mais produtos (a sincronização parte sempre do produto pai e leva todas as variações junto).
-        </p>
-
-        <input
-          type="text"
-          placeholder="Filtrar por nome ou código..."
-          value={buscaGrid}
-          onChange={(e) => setBuscaGrid(e.target.value)}
-          style={{
-            width: '100%',
-            maxWidth: '400px',
-            padding: '8px',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            fontSize: '14px',
-            boxSizing: 'border-box',
-            marginBottom: '12px',
-          }}
-        />
-
-        <div style={{
-          maxHeight: '260px',
-          overflowY: 'auto',
-          border: '1px solid #e5e7eb',
-          borderRadius: '4px',
-        }}>
-          {paisFiltrados.length === 0 ? (
-            <div style={{ padding: '16px', textAlign: 'center', color: '#666', fontSize: '13px' }}>
-              Nenhum produto encontrado.
-            </div>
-          ) : (
-            paisFiltrados.map((p) => {
-              const temVinculo = grupoTemVinculo(p.id);
-              return (
-                <label
-                  key={p.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '8px 12px',
-                    borderBottom: '1px solid #f3f4f6',
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    backgroundColor: selecionados.has(p.id) ? '#eff6ff' : 'transparent',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selecionados.has(p.id)}
-                    onChange={() => toggleSelecionado(p.id)}
-                  />
-                  <span style={{ flex: 1 }}>{p.nome} ({p.codigo})</span>
-                  <span style={{
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    fontSize: '11px',
-                    fontWeight: '600',
-                    backgroundColor: temVinculo ? '#dcfce7' : '#fee2e2',
-                    color: temVinculo ? '#166534' : '#991b1b',
-                  }}>
-                    {temVinculo ? 'Já vinculado' : 'Nunca vinculado'}
-                  </span>
-                </label>
-              );
-            })
-          )}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px' }}>
-          <button
-            onClick={handleSincronizarSelecionados}
-            disabled={selecionados.size === 0 || sincronizandoSelecionados}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: selecionados.size === 0 || sincronizandoSelecionados ? '#ccc' : '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '14px',
-              fontWeight: 'bold',
-              cursor: selecionados.size === 0 || sincronizandoSelecionados ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {sincronizandoSelecionados
-              ? `Sincronizando ${progressoSelecionados?.atual ?? 0}/${progressoSelecionados?.total ?? selecionados.size}...`
-              : `Sincronizar ${selecionados.size} selecionado(s)`}
-          </button>
-
-          {selecionados.size > 0 && !sincronizandoSelecionados && (
-            <button
-              onClick={() => setSelecionados(new Set())}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: 'transparent',
-                color: '#666',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '14px',
-                cursor: 'pointer',
-              }}
-            >
-              Limpar seleção
-            </button>
-          )}
-        </div>
-      </div>
-
       {error && (
         <div style={{
           padding: '12px',
@@ -398,10 +280,13 @@ export default function LojasPage() {
         </div>
       ) : (
         <>
-          {/* Cards de canais */}
+          {/* Cards de canais - a sincronização é sempre por canal, então
+              escolher um aqui é o que seleciona o alvo da sincronização
+              abaixo (grid e status também passam a valer só pra ele) */}
           <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
             {canais.map((c) => {
-              const totalVinculado = vinculos.filter((v) => v.canal_venda_id === c.id).length;
+              const vinculosCanal = vinculos.filter((v) => v.canal_venda_id === c.id);
+              const pendentesCanal = vinculosCanal.filter(estaPendente).length;
               return (
                 <div
                   key={c.id}
@@ -430,11 +315,147 @@ export default function LojasPage() {
                     </span>
                   </div>
                   <div style={{ fontSize: '13px', color: '#666', marginTop: '8px' }}>
-                    {totalVinculado} produto(s) vinculado(s)
+                    {vinculosCanal.length} produto(s) vinculado(s)
                   </div>
+                  {pendentesCanal > 0 && (
+                    <div style={{ fontSize: '12px', color: '#92400e', marginTop: '4px', fontWeight: '600' }}>
+                      {pendentesCanal} pendente(s)
+                    </div>
+                  )}
                 </div>
               );
             })}
+          </div>
+
+          {/* Grid de seleção múltipla para sincronizar vários produtos - sempre
+              restrito ao canal escolhido acima, um de cada vez */}
+          <div style={{
+            marginBottom: '24px',
+            padding: '16px',
+            backgroundColor: 'white',
+            borderRadius: '4px',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+          }}>
+            <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>
+              Sincronizar produtos selecionados
+            </div>
+
+            {!canalFiltro ? (
+              <p style={{ margin: 0, fontSize: '13px', color: '#92400e' }}>
+                Selecione um canal de venda acima para sincronizar produtos com ele.
+              </p>
+            ) : (
+              <>
+                <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#666' }}>
+                  Selecionando produtos para sincronizar com <strong>{canaisMap.get(canalFiltro)?.descricao}</strong> (a
+                  sincronização parte sempre do produto pai e leva todas as variações junto).
+                </p>
+
+                <input
+                  type="text"
+                  placeholder="Filtrar por nome ou código..."
+                  value={buscaGrid}
+                  onChange={(e) => setBuscaGrid(e.target.value)}
+                  style={{
+                    width: '100%',
+                    maxWidth: '400px',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box',
+                    marginBottom: '12px',
+                  }}
+                />
+
+                <div style={{
+                  maxHeight: '260px',
+                  overflowY: 'auto',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '4px',
+                }}>
+                  {paisFiltrados.length === 0 ? (
+                    <div style={{ padding: '16px', textAlign: 'center', color: '#666', fontSize: '13px' }}>
+                      Nenhum produto encontrado.
+                    </div>
+                  ) : (
+                    paisFiltrados.map((p) => {
+                      const temVinculo = grupoTemVinculo(p.id);
+                      return (
+                        <label
+                          key={p.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            padding: '8px 12px',
+                            borderBottom: '1px solid #f3f4f6',
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                            backgroundColor: selecionados.has(p.id) ? '#eff6ff' : 'transparent',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selecionados.has(p.id)}
+                            onChange={() => toggleSelecionado(p.id)}
+                          />
+                          <span style={{ flex: 1 }}>{p.nome} ({p.codigo})</span>
+                          <span style={{
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            backgroundColor: temVinculo ? '#dcfce7' : '#fee2e2',
+                            color: temVinculo ? '#166534' : '#991b1b',
+                          }}>
+                            {temVinculo ? 'Já vinculado' : 'Nunca vinculado'}
+                          </span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px' }}>
+                  <button
+                    onClick={handleSincronizarSelecionados}
+                    disabled={selecionados.size === 0 || sincronizandoSelecionados}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: selecionados.size === 0 || sincronizandoSelecionados ? '#ccc' : '#3b82f6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      cursor: selecionados.size === 0 || sincronizandoSelecionados ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {sincronizandoSelecionados
+                      ? `Sincronizando ${progressoSelecionados?.atual ?? 0}/${progressoSelecionados?.total ?? selecionados.size}...`
+                      : `Sincronizar ${selecionados.size} selecionado(s)`}
+                  </button>
+
+                  {selecionados.size > 0 && !sincronizandoSelecionados && (
+                    <button
+                      onClick={() => setSelecionados(new Set())}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: 'transparent',
+                        color: '#666',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Limpar seleção
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px', flexWrap: 'wrap' }}>
@@ -447,7 +468,7 @@ export default function LojasPage() {
                 fontSize: '13px',
                 fontWeight: '600',
               }}>
-                {totalPendentes} produto(s) pendente(s) de sincronização
+                {totalPendentes} produto(s) pendente(s) de sincronização{canalFiltro ? ` em ${canaisMap.get(canalFiltro)?.descricao}` : ''}
               </span>
             )}
 
@@ -523,7 +544,7 @@ export default function LojasPage() {
                         <td style={{ padding: '12px', textAlign: 'center' }}>
                           {pendente && (
                             <button
-                              onClick={() => handleSincronizarLinha(v.produto_id)}
+                              onClick={() => handleSincronizarLinha(v.produto_id, v.canal_venda_id)}
                               disabled={sincronizandoLinha === v.produto_id}
                               style={{
                                 padding: '4px 10px',
