@@ -141,6 +141,7 @@ export default function ProdutosPage() {
   const [categoriaFilter, setCategoriaFilter] = useState<string>('');
   const [categoriasMap, setCategoriasMap] = useState<Map<number, string>>(new Map());
   const [categoriasLista, setCategoriasLista] = useState<{ id: number; descricao: string }[]>([]);
+  const [corrigindoVinculos, setCorrigindoVinculos] = useState(false);
   const supabase = createSupabaseClientBrowser();
 
   useEffect(() => {
@@ -316,6 +317,33 @@ export default function ProdutosPage() {
     }
   }
 
+  async function handleCorrigirVinculos() {
+    if (!window.confirm(
+      'Isso busca o detalhe de cada produto direto no Bling pra corrigir variações que perderam o vínculo com o produto pai ' +
+      '(acontece quando a criação de uma nova variação não confirma a tempo). Percorre o catálogo inteiro e pode levar vários minutos. Continuar?'
+    )) {
+      return;
+    }
+
+    try {
+      setCorrigindoVinculos(true);
+      setError(null);
+
+      const response = await fetch('/api/bling/sync-detalhes');
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao corrigir vínculos de variação');
+      }
+
+      window.location.reload();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao corrigir vínculos de variação');
+    } finally {
+      setCorrigindoVinculos(false);
+    }
+  }
+
   async function handleDeletar(id: number) {
     if (!window.confirm('Tem certeza que deseja deletar este produto?')) {
       return;
@@ -468,6 +496,24 @@ export default function ProdutosPage() {
             }}
           >
             {loading ? 'Sincronizando...' : 'Sincronizar'}
+          </button>
+
+          <button
+            onClick={handleCorrigirVinculos}
+            disabled={corrigindoVinculos}
+            title="Corrige variações que perderam o vínculo com o produto pai (pode levar vários minutos)"
+            style={{
+              padding: '8px 16px',
+              backgroundColor: corrigindoVinculos ? '#ccc' : '#8b5cf6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              cursor: corrigindoVinculos ? 'not-allowed' : 'pointer'
+            }}
+          >
+            {corrigindoVinculos ? 'Corrigindo...' : 'Corrigir vínculos de variação'}
           </button>
         </div>
       </div>
