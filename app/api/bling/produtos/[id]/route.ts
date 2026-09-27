@@ -125,14 +125,26 @@ export async function PUT(
     // não a preserve como se fosse um campo simplesmente não retornado por
     // outro payload. Se o Bling não aceitou a remoção, mantemos a categoria
     // antiga local para não divergir do estado real.
-    const rawAtualizado = categoriaFoiInformada
-      ? {
-          ...(produtoAtual.raw || {}),
-          categoria: categoriaId
-            ? { id: Number(categoriaId) }
-            : (categoriaFoiRealmenteLimpa ? null : produtoAtual.raw?.categoria),
-        }
-      : produtoAtual.raw;
+    const rawAtualizado: any = { ...(produtoAtual.raw || {}), nome };
+
+    if (categoriaFoiInformada) {
+      rawAtualizado.categoria = categoriaId
+        ? { id: Number(categoriaId) }
+        : (categoriaFoiRealmenteLimpa ? null : produtoAtual.raw?.categoria);
+    }
+
+    // raw.variacao.nome é o que as telas de grupo preferem ao extrair cor/
+    // tamanho (extrairAtributos() usa esse campo antes do "nome" plano) -
+    // se não for atualizado aqui junto, a edição parece não persistir: o
+    // "nome" muda, mas a tela continua mostrando a cor/tamanho antigos
+    // porque lê de raw.variacao.nome, que ficaria travado no valor anterior.
+    if (blingPayload.variacao) {
+      rawAtualizado.variacao = {
+        ...(produtoAtual.raw?.variacao || {}),
+        nome: blingPayload.variacao.nome,
+        produtoPai: blingPayload.variacao.produtoPai,
+      };
+    }
 
     await supabase.from('bling_produtos').update({
       nome,
