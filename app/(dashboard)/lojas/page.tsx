@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { createSupabaseClientBrowser } from '@/lib/supabase/client';
 
 interface CanalVenda {
@@ -58,6 +58,10 @@ export default function LojasPage() {
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
   const [sincronizandoSelecionados, setSincronizandoSelecionados] = useState(false);
   const [progressoSelecionados, setProgressoSelecionados] = useState<{ atual: number; total: number } | null>(null);
+
+  // Tabela agrupada por produto pai (cada variação vira um vínculo próprio no
+  // Bling, mas a lista sempre mostra o pai - expande pra ver as variações)
+  const [gruposExpandidos, setGruposExpandidos] = useState<Set<string>>(new Set());
 
   const supabase = createSupabaseClientBrowser();
 
@@ -228,6 +232,42 @@ export default function LojasPage() {
       p.nome.toLowerCase().includes(buscaGridLower) ||
       p.codigo.toLowerCase().includes(buscaGridLower)
   );
+
+  // A tabela sempre mostra o produto pai, nunca cada variação numa linha
+  // separada - agrupa os vínculos filtrados por (produto pai, canal) e cada
+  // grupo pode ser expandido pra ver o detalhe de cada variação.
+  const todosProdutosMap = new Map(todosProdutos.map((p) => [p.id, p]));
+  const paiIdPorProduto = new Map<number, number>(todosProdutos.map((p) => [p.id, idPaiDe(p)]));
+
+  interface GrupoVinculo {
+    chave: string;
+    paiId: number;
+    canalId: number;
+    vinculos: VinculoProduto[];
+  }
+
+  const gruposMap = new Map<string, GrupoVinculo>();
+  vinculosFiltrados.forEach((v) => {
+    const paiId = paiIdPorProduto.get(v.produto_id) ?? v.produto_id;
+    const chave = `${paiId}_${v.canal_venda_id}`;
+    if (!gruposMap.has(chave)) {
+      gruposMap.set(chave, { chave, paiId, canalId: v.canal_venda_id, vinculos: [] });
+    }
+    gruposMap.get(chave)!.vinculos.push(v);
+  });
+  const gruposTabela = Array.from(gruposMap.values());
+
+  function toggleGrupoExpandido(chave: string) {
+    setGruposExpandidos((prev) => {
+      const novo = new Set(prev);
+      if (novo.has(chave)) {
+        novo.delete(chave);
+      } else {
+        novo.add(chave);
+      }
+      return novo;
+    });
+  }
 
   return (
     <div>
@@ -508,60 +548,115 @@ export default function LojasPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {vinculosFiltrados.map((v) => {
-                    const produto = produtosMap.get(v.produto_id);
-                    const canal = canaisMap.get(v.canal_venda_id);
-                    const pendente = estaPendente(v);
+                  {gruposTabela.map((grupo) => {
+                    const pai = todosProdutosMap.get(grupo.paiId);
+                    const canal = canaisMap.get(grupo.canalId);
+                    const pendentesGrupo = grupo.vinculos.filter(estaPendente).length;
+                    const algumPendente = pendentesGrupo > 0;
+                    const temVariacoes = grupo.vinculos.length > 1;
+                    const expandido = gruposExpandidos.has(grupo.chave);
+                    const vinculoUnico = !temVariacoes ? grupo.vinculos[0] : null;
+
                     return (
-                      <tr key={v.id} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: pendente ? '#fffbeb' : 'transparent' }}>
-                        <td style={{ padding: '12px', fontSize: '14px' }}>
-                          {produto ? `${produto.nome} (${produto.codigo})` : `Produto #${v.produto_id}`}
-                        </td>
-                        <td style={{ padding: '12px', fontSize: '14px' }}>
-                          {canal?.descricao || `Canal #${v.canal_venda_id}`}
-                        </td>
-                        <td style={{ padding: '12px', fontSize: '14px', fontFamily: 'monospace' }}>
-                          {v.codigo || '—'}
-                        </td>
-                        <td style={{ padding: '12px', fontSize: '14px', textAlign: 'right' }}>
-                          {v.preco ? `R$ ${Number(v.preco).toFixed(2)}` : '—'}
-                        </td>
-                        <td style={{ padding: '12px', fontSize: '14px', textAlign: 'right' }}>
-                          {v.preco_promocional ? `R$ ${Number(v.preco_promocional).toFixed(2)}` : '—'}
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center' }}>
-                          <span style={{
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            backgroundColor: pendente ? '#fde68a' : '#dcfce7',
-                            color: pendente ? '#92400e' : '#166534',
-                          }}>
-                            {pendente ? 'Pendente' : 'Sincronizado'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center' }}>
-                          {pendente && (
-                            <button
-                              onClick={() => handleSincronizarLinha(v.produto_id, v.canal_venda_id)}
-                              disabled={sincronizandoLinha === v.produto_id}
-                              style={{
-                                padding: '4px 10px',
-                                backgroundColor: sincronizandoLinha === v.produto_id ? '#ccc' : '#3b82f6',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                fontSize: '12px',
-                                fontWeight: '600',
-                                cursor: sincronizandoLinha === v.produto_id ? 'not-allowed' : 'pointer',
-                              }}
-                            >
-                              {sincronizandoLinha === v.produto_id ? 'Sincronizando...' : 'Sincronizar'}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
+                      <Fragment key={grupo.chave}>
+                        <tr style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: algumPendente ? '#fffbeb' : 'transparent' }}>
+                          <td
+                            style={{ padding: '12px', fontSize: '14px', cursor: temVariacoes ? 'pointer' : 'default' }}
+                            onClick={() => temVariacoes && toggleGrupoExpandido(grupo.chave)}
+                          >
+                            {temVariacoes && (
+                              <span style={{ display: 'inline-block', width: '16px', color: '#666' }}>
+                                {expandido ? '▼' : '▶'}
+                              </span>
+                            )}
+                            {pai ? `${pai.nome} (${pai.codigo})` : `Produto #${grupo.paiId}`}
+                            {temVariacoes && (
+                              <span style={{ fontSize: '12px', color: '#666' }}> ({grupo.vinculos.length} variações)</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px', fontSize: '14px' }}>
+                            {canal?.descricao || `Canal #${grupo.canalId}`}
+                          </td>
+                          <td style={{ padding: '12px', fontSize: '14px', fontFamily: 'monospace' }}>
+                            {vinculoUnico ? (vinculoUnico.codigo || '—') : '—'}
+                          </td>
+                          <td style={{ padding: '12px', fontSize: '14px', textAlign: 'right' }}>
+                            {vinculoUnico?.preco ? `R$ ${Number(vinculoUnico.preco).toFixed(2)}` : '—'}
+                          </td>
+                          <td style={{ padding: '12px', fontSize: '14px', textAlign: 'right' }}>
+                            {vinculoUnico?.preco_promocional ? `R$ ${Number(vinculoUnico.preco_promocional).toFixed(2)}` : '—'}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              backgroundColor: algumPendente ? '#fde68a' : '#dcfce7',
+                              color: algumPendente ? '#92400e' : '#166534',
+                            }}>
+                              {algumPendente
+                                ? (temVariacoes ? `Pendente (${pendentesGrupo}/${grupo.vinculos.length})` : 'Pendente')
+                                : 'Sincronizado'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                            {algumPendente && (
+                              <button
+                                onClick={() => handleSincronizarLinha(grupo.paiId, grupo.canalId)}
+                                disabled={sincronizandoLinha === grupo.paiId}
+                                style={{
+                                  padding: '4px 10px',
+                                  backgroundColor: sincronizandoLinha === grupo.paiId ? '#ccc' : '#3b82f6',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  fontWeight: '600',
+                                  cursor: sincronizandoLinha === grupo.paiId ? 'not-allowed' : 'pointer',
+                                }}
+                              >
+                                {sincronizandoLinha === grupo.paiId ? 'Sincronizando...' : 'Sincronizar'}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+
+                        {expandido && grupo.vinculos.map((v) => {
+                          const produto = produtosMap.get(v.produto_id);
+                          const pendenteVariacao = estaPendente(v);
+                          return (
+                            <tr key={v.id} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: '#fafafa' }}>
+                              <td style={{ padding: '8px 12px 8px 40px', fontSize: '13px', color: '#666' }}>
+                                {produto ? `${produto.nome} (${produto.codigo})` : `Produto #${v.produto_id}`}
+                              </td>
+                              <td></td>
+                              <td style={{ padding: '8px 12px', fontSize: '13px', fontFamily: 'monospace', color: '#666' }}>
+                                {v.codigo || '—'}
+                              </td>
+                              <td style={{ padding: '8px 12px', fontSize: '13px', textAlign: 'right', color: '#666' }}>
+                                {v.preco ? `R$ ${Number(v.preco).toFixed(2)}` : '—'}
+                              </td>
+                              <td style={{ padding: '8px 12px', fontSize: '13px', textAlign: 'right', color: '#666' }}>
+                                {v.preco_promocional ? `R$ ${Number(v.preco_promocional).toFixed(2)}` : '—'}
+                              </td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  backgroundColor: pendenteVariacao ? '#fde68a' : '#dcfce7',
+                                  color: pendenteVariacao ? '#92400e' : '#166534',
+                                }}>
+                                  {pendenteVariacao ? 'Pendente' : 'Sincronizado'}
+                                </span>
+                              </td>
+                              <td></td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -570,7 +665,7 @@ export default function LojasPage() {
           )}
 
           <p style={{ marginTop: '12px', fontSize: '13px', color: '#999' }}>
-            Total: {vinculosFiltrados.length} vínculo(s)
+            Total: {gruposTabela.length} produto(s), {vinculosFiltrados.length} vínculo(s)
           </p>
         </>
       )}
