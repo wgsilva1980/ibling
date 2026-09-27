@@ -33,6 +33,10 @@ export default function LojasPage() {
   const [sincronizando, setSincronizando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [canalFiltro, setCanalFiltro] = useState<number | ''>('');
+  const [buscaProduto, setBuscaProduto] = useState('');
+  const [sugestoesProduto, setSugestoesProduto] = useState<Produto[]>([]);
+  const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
+  const [sincronizandoProduto, setSincronizandoProduto] = useState(false);
   const supabase = createSupabaseClientBrowser();
 
   async function carregarDados() {
@@ -79,6 +83,59 @@ export default function LojasPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    async function buscarSugestoes() {
+      if (produtoSelecionado || buscaProduto.trim().length < 2) {
+        setSugestoesProduto([]);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('bling_produtos')
+        .select('id, codigo, nome')
+        .or(`nome.ilike.%${buscaProduto}%,codigo.ilike.%${buscaProduto}%`)
+        .order('nome')
+        .limit(10);
+
+      setSugestoesProduto(data || []);
+    }
+
+    buscarSugestoes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buscaProduto, produtoSelecionado]);
+
+  function handleSelecionarProduto(produto: Produto) {
+    setProdutoSelecionado(produto);
+    setBuscaProduto('');
+    setSugestoesProduto([]);
+  }
+
+  function handleLimparProdutoSelecionado() {
+    setProdutoSelecionado(null);
+  }
+
+  async function handleSincronizarProduto() {
+    if (!produtoSelecionado) return;
+
+    try {
+      setSincronizandoProduto(true);
+      setError(null);
+
+      const response = await fetch(`/api/bling/lojas/sync?produtoId=${produtoSelecionado.id}`);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao sincronizar produto');
+      }
+
+      await carregarDados();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao sincronizar produto');
+    } finally {
+      setSincronizandoProduto(false);
+    }
+  }
+
   async function handleSincronizar() {
     try {
       setSincronizando(true);
@@ -106,7 +163,7 @@ export default function LojasPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 style={{ marginTop: 0, marginBottom: '4px' }}>Canais de Venda</h2>
           <p style={{ margin: 0, fontSize: '14px', color: '#666' }}>
@@ -128,8 +185,114 @@ export default function LojasPage() {
             cursor: sincronizando ? 'not-allowed' : 'pointer',
           }}
         >
-          {sincronizando ? 'Sincronizando...' : 'Sincronizar'}
+          {sincronizando ? 'Sincronizando...' : 'Sincronizar tudo'}
         </button>
+      </div>
+
+      {/* Sincronizar um produto específico */}
+      <div style={{
+        marginBottom: '24px',
+        padding: '16px',
+        backgroundColor: 'white',
+        borderRadius: '4px',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+      }}>
+        <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>
+          Sincronizar um produto específico
+        </div>
+
+        {produtoSelecionado ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <span style={{
+              padding: '6px 12px',
+              backgroundColor: '#eff6ff',
+              color: '#1d4ed8',
+              borderRadius: '4px',
+              fontSize: '14px',
+            }}>
+              {produtoSelecionado.nome} ({produtoSelecionado.codigo})
+            </span>
+            <button
+              onClick={handleSincronizarProduto}
+              disabled={sincronizandoProduto}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: sincronizandoProduto ? '#ccc' : '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                cursor: sincronizandoProduto ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {sincronizandoProduto ? 'Sincronizando...' : 'Sincronizar este produto'}
+            </button>
+            <button
+              onClick={handleLimparProdutoSelecionado}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: 'transparent',
+                color: '#666',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                cursor: 'pointer',
+              }}
+            >
+              Trocar produto
+            </button>
+          </div>
+        ) : (
+          <div style={{ position: 'relative', maxWidth: '400px' }}>
+            <input
+              type="text"
+              placeholder="Buscar produto por nome ou código..."
+              value={buscaProduto}
+              onChange={(e) => setBuscaProduto(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                boxSizing: 'border-box',
+              }}
+            />
+
+            {sugestoesProduto.length > 0 && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                backgroundColor: 'white',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                marginTop: '4px',
+                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
+                zIndex: 10,
+                maxHeight: '240px',
+                overflowY: 'auto',
+              }}>
+                {sugestoesProduto.map((p) => (
+                  <div
+                    key={p.id}
+                    onClick={() => handleSelecionarProduto(p)}
+                    style={{
+                      padding: '8px 12px',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid #f3f4f6',
+                    }}
+                  >
+                    {p.nome} <span style={{ color: '#999' }}>({p.codigo})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {error && (

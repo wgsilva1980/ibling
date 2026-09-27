@@ -114,3 +114,84 @@ export async function syncProdutosLojas(): Promise<{
     return { totalVinculos, totalCanais: 0, status: 'erro', erro: error.message };
   }
 }
+
+// Sincroniza só os vínculos de um produto específico (filtro idProduto do
+// Bling), em vez de percorrer o catálogo inteiro - útil quando o usuário só
+// quer atualizar/conferir um produto pontual com os canais de venda.
+export async function syncProdutoLoja(produtoId: number): Promise<{
+  totalVinculos: number;
+  status: 'sucesso' | 'erro';
+  erro?: string;
+}> {
+  const supabase = createSupabaseClient();
+  let totalVinculos = 0;
+
+  try {
+    console.log(`Iniciando sincronização de produto x lojas (produto ${produtoId})...`);
+
+    const { data: canaisExistentes } = await supabase.from('bling_canais_venda').select('id');
+    const canaisConhecidos = new Set<number>((canaisExistentes || []).map((c: any) => c.id));
+
+    let pagina = 1;
+    let vinculosProduto: any[] = [];
+
+    while (true) {
+      const resp = await blingRequest(`/produtos/lojas?idProduto=${produtoId}&pagina=${pagina}&limite=100`);
+
+      if (!resp.data || resp.data.length === 0) break;
+
+      vinculosProduto = vinculosProduto.concat(resp.data);
+      pagina++;
+      await sleep(350); // Respeitar rate limit
+    }
+
+    console.log(`Vínculos encontrados para o produto ${produtoId}: ${vinculosProduto.length}`);
+
+    const idsCanais = new Set<number>(vinculosProduto.map((v) => v.loja?.id).filter(Boolean));
+    for (const idCanal of idsCanais) {
+      if (!canaisConhecidos.has(idCanal)) {
+        await sincronizarCanalVenda(idCanal, canaisConhecidos);
+        await sleep(350);
+      }
+    }
+
+    for (const v of vinculosProduto) {
+      try {
+        await supabase.from('bling_produtos_lojas').upsert(
+          {
+            id: v.id,
+            produto_id: v.produto?.id,
+            canal_venda_id: v.loja?.id,
+            codigo: v.codigo,
+            preco: v.preco,
+            preco_promocional: v.precoPromocional,
+            raw: v,
+            atualizado_em: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
+        totalVinculos++;
+      } catch (error) {
+        console.error(`Erro ao armazenar vínculo ${v.id}:`, error);
+      }
+    }
+
+    await supabase.from('bling_sync_log').insert({
+      tipo: 'produtos_lojas',
+      status: 'sucesso',
+      detalhes: { produto_id: produtoId, total_vinculos: totalVinculos },
+    });
+
+    return { totalVinculos, status: 'sucesso' };
+  } catch (error: any) {
+    console.error(`Erro na sincronização do produto ${produtoId} x lojas:`, error);
+
+    await supabase.from('bling_sync_log').insert({
+      tipo: 'produtos_lojas',
+      status: 'erro',
+      detalhes: { produto_id: produtoId, erro: error.message },
+    });
+
+    return { totalVinculos, status: 'erro', erro: error.message };
+  }
+}
