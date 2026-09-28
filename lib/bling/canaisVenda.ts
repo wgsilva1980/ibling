@@ -119,7 +119,7 @@ export async function syncProdutosLojas(): Promise<{
 // ou um produto sem variações), a partir dos dois formatos em que essa
 // relação pode vir salva no raw (lista vs. detalhe do Bling - mesmo fallback
 // usado em produtos/[id]/route.ts e nas telas de grupo).
-function idPaiDe(produto: { id: number; raw?: any }): number {
+export function idPaiDe(produto: { id: number; raw?: any }): number {
   return produto.raw?.idProdutoPai || produto.raw?.variacao?.produtoPai?.id || produto.id;
 }
 
