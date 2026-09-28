@@ -108,7 +108,7 @@ export async function syncGrupoComNuvemshop(produtoId: number): Promise<{
     // segurança), então isso é melhor-esforço: se falhar, o produto já foi
     // criado de verdade na Nuvemshop mesmo assim, só o Bling não fica sabendo.
     async function registrarMapeamento(produto: ProdutoBling, nuvemshopProductId: number, nuvemshopCode: string) {
-      await supabase.from('nuvemshop_product_mapping').upsert(
+      const { error: erroMapeamento } = await supabase.from('nuvemshop_product_mapping').upsert(
         {
           bling_product_id: produto.id,
           nuvemshop_product_id: nuvemshopProductId,
@@ -118,6 +118,10 @@ export async function syncGrupoComNuvemshop(produtoId: number): Promise<{
         },
         { onConflict: 'bling_product_id' }
       );
+
+      if (erroMapeamento) {
+        throw new Error(`Falha ao gravar nuvemshop_product_mapping para produto ${produto.id}: ${erroMapeamento.message}`);
+      }
 
       try {
         await blingRequest('/produtos/lojas', {
