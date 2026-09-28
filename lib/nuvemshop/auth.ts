@@ -23,12 +23,17 @@ export async function storeTokens(code: string): Promise<void> {
     }),
   });
 
+  const rawBody = await response.text();
+
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to get Nuvemshop tokens: ${error}`);
+    throw new Error(`Failed to get Nuvemshop tokens: ${rawBody}`);
   }
 
-  const data: NuvemshopTokenResponse = await response.json();
+  const data: NuvemshopTokenResponse = JSON.parse(rawBody);
+
+  if (!data.access_token || !data.user_id) {
+    throw new Error(`Nuvemshop token response missing access_token/user_id: ${rawBody}`);
+  }
 
   const { error } = await supabase.from('nuvemshop_tokens').insert({
     access_token: data.access_token,
