@@ -127,6 +127,16 @@ export default function LojasPage() {
     });
   }
 
+  // Só a Nuvemshop tem conexão direta via API própria (canaisVenda.ts + a
+  // sincronização nativa do Bling) - os outros canais continuam usando só a
+  // sincronização de leitura já existente contra o Bling.
+  function endpointDeSincronizacao(produtoId: number, canalVendaId: number): string {
+    const canal = canaisMap.get(canalVendaId);
+    return canal?.tipo === 'Nuvemshop'
+      ? `/api/nuvemshop/sync?produtoId=${produtoId}`
+      : `/api/bling/lojas/sync?produtoId=${produtoId}&canalVendaId=${canalVendaId}`;
+  }
+
   async function handleSincronizarSelecionados() {
     const ids = Array.from(selecionados);
     if (ids.length === 0 || !canalFiltro) return;
@@ -138,7 +148,7 @@ export default function LojasPage() {
       for (let i = 0; i < ids.length; i++) {
         setProgressoSelecionados({ atual: i + 1, total: ids.length });
 
-        const response = await fetch(`/api/bling/lojas/sync?produtoId=${ids[i]}&canalVendaId=${canalFiltro}`);
+        const response = await fetch(endpointDeSincronizacao(ids[i], canalFiltro));
         const result = await response.json();
 
         if (!response.ok) {
@@ -161,7 +171,7 @@ export default function LojasPage() {
       setSincronizandoLinha(produtoId);
       setError(null);
 
-      const response = await fetch(`/api/bling/lojas/sync?produtoId=${produtoId}&canalVendaId=${canalVendaId}`);
+      const response = await fetch(endpointDeSincronizacao(produtoId, canalVendaId));
       const result = await response.json();
 
       if (!response.ok) {
